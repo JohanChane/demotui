@@ -12,6 +12,6 @@ use crate::utils::log_utils;
 
 pub fn init() {
     backend::event::BackEndEvent::init();
-    log_utils::setup(4);
+    log_utils::setup(3);
     frontend::event::FrontEndEvent::init();
 }

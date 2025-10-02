@@ -2,8 +2,10 @@ use std::sync::atomic::Ordering;
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
+use demotui_backend::backend;
 use demotui_shared::{
     backend::{event::BackEndEvent, op::BackEndOp, AddActOpt},
+    backend_emit,
     data::Data,
     frontend::{
         event::{FrontEndEvent, NEED_RENDER},
@@ -46,7 +48,8 @@ impl<'a> Dispatcher<'a> {
     pub fn dispatch_key(&self, key_event: KeyEvent) -> Result<Data> {
         match key_event.code {
             KeyCode::Char('a') => {
-                BackEndEvent::Call(BackEndOp::Add(AddActOpt { a: 1, b: 2 })).emit()
+                // BackEndEvent::Call(BackEndOp::Add(AddActOpt { a: 1, b: 2 })).emit()
+                backend_emit!(Call(Add, AddActOpt { a: 1, b: 2 }));
             }
             _ => {}
         }

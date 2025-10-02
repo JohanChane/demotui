@@ -2,7 +2,7 @@ use std::mem::swap;
 
 use anyhow::Result;
 use crossterm::event::{self, Event as CrosstermEvent, KeyEvent, KeyEventKind};
-use demotui_shared::frontend::event::FrontEndEvent;
+use demotui_shared::{frontend::event::FrontEndEvent, frontend_emit};
 use futures_lite::StreamExt;
 use tokio::{select, task::spawn_blocking};
 
@@ -21,8 +21,13 @@ impl Signals {
                     kind: KeyEventKind::Press,
                     ..
                 },
-            ) => FrontEndEvent::Key(key).emit(),
-            CrosstermEvent::Resize(..) => FrontEndEvent::Resize.emit(),
+            ) => {
+                // FrontEndEvent::Key(key).emit();
+                frontend_emit!(Key(key));
+            }
+            CrosstermEvent::Resize(..) => {
+                frontend_emit!(Resize);
+            }
             _ => {}
         }
     }
