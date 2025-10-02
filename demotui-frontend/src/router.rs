@@ -1,31 +1,30 @@
 use anyhow::Result;
-pub(super) struct Router {}
+use demotui_shared::layer::Layer;
 
-impl Router {
-    pub(super) fn new() -> Self {
-        Self {}
+use crate::tui::frontend::FrontEnd;
+pub(super) struct Router<'a> {
+    frontend: &'a mut FrontEnd,
+}
+
+impl<'a> Router<'a> {
+    pub(super) fn new(frontend: &'a mut FrontEnd) -> Self {
+        Self { frontend }
     }
 
     // pub(super) fn route(&mut self, key: Key) -> Result<bool> {
-    //     let core = &mut self.app.core;
-    //     let layer = core.layer();
+    //     let layer = self.frontend.layer();
 
-    //     if core.help.visible && core.help.r#type(&key)? {
-    //         return Ok(true);
-    //     }
-    //     if core.input.visible && core.input.r#type(&key)? {
-    //         return Ok(true);
-    //     }
+    //     match layer {
+    //         Layer::App => unreachable!(),
 
-    //     use Layer as L;
-    //     Ok(match layer {
-    //         L::App => unreachable!(),
-    //         L::Mgr | L::Tasks | L::Spot | L::Pick | L::Input | L::Confirm | L::Help => {
-    //             self.matches(layer, key)
+    //         Layer::Which => core.which.r#type(),
+    //         // ...
+    //         Layer::Main => {
+    //             // check tab index
+    //             // if prof_tmpl:
+    //             //      prof_tmpl.r#type()
     //         }
-    //         L::Cmp => self.matches(L::Cmp, key) || self.matches(L::Input, key),
-    //         L::Which => core.which.r#type(key),
-    //     })
+    //     }
     // }
 
     // fn matches(&mut self, layer: Layer, key: Key) -> bool {

@@ -2,6 +2,7 @@ pub mod backend;
 pub mod consts;
 pub mod data;
 pub mod frontend;
+pub mod layer;
 pub mod macros;
 pub mod ro_cell;
 pub mod utils;
