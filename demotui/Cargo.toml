@@ -1,0 +1,35 @@
+[package]
+name = "demotui"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+demotui-shared = {path = "../demotui-shared"}
+demotui-frontend = {path = "../demotui-frontend"}
+demotui-backend = {path = "../demotui-backend"}
+
+log = { workspace = true }
+env_logger = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# 通过 features 控制依赖
+futures-lite = { workspace = true, optional = true }
+strum = { workspace = true, optional = true }
+derive_more = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+crossterm = { workspace = true, optional = true }
+ratatui = { workspace = true, optional = true }
+
+[features]
+tui = [
+  "dep:ratatui",
+  "dep:crossterm",
+  "dep:tokio",
+  "dep:futures-lite",
+  "dep:derive_more",
+  "dep:strum",
+]
+
+default = ["tui"]
