@@ -8,7 +8,7 @@ pub struct InfoAct;
 impl FrontEndActor for InfoAct {
     type Options = InfoActOpt;
     fn act(ctx: &mut Ctx, opt: InfoActOpt) -> Result<Data> {
-        log::info!("Execute InfoAct");
+        log::debug!("Execute InfoAct");
         Ok(Data::from("Msg from FrontEndActor"))
     }
 }

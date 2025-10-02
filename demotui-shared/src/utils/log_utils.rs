@@ -27,10 +27,10 @@ pub fn setup(level: u8) {
         .target(env_logger::Target::Pipe(Box::new(log_file)))
         .init();
 
-    log::info!("{}", "-".repeat(20));
+    log::debug!("{}", "-".repeat(20));
     log::debug!("Start Log, level: {}", log_level);
     if flag {
-        log::info!("Old log file too large, cleared")
+        log::debug!("Old log file too large, cleared")
     }
 }
 

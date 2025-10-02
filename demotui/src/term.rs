@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use anyhow::Result;
 use crossterm::{
     cursor,
@@ -71,5 +73,13 @@ impl Term {
     pub(crate) fn resize(&mut self) -> Result<()> {
         self.inner.autoresize()?;
         Ok(())
+    }
+
+    // TODO
+    pub(super) fn goodbye(f: impl FnOnce() -> i32) -> ! {
+        Self::restore();
+
+        log::debug!("goodbye");
+        std::process::exit(f());
     }
 }

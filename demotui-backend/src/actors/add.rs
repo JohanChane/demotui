@@ -9,7 +9,7 @@ impl BackEndActor for AddAct {
     type Options = AddActOpt;
     fn act(ctx: &mut Ctx, opt: Self::Options) -> Result<Data> {
         let sum = opt.a + opt.b;
-        log::info!("sum: {}", sum);
+        log::debug!("sum: {}", sum);
         Ok(Data::from(sum))
     }
 }

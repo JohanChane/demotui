@@ -164,10 +164,12 @@ dependencies = [
  "derive_more",
  "env_logger",
  "futures-lite",
+ "libc",
  "log",
  "ratatui",
  "serde",
  "serde_json",
+ "signal-hook-tokio",
  "strum",
  "tokio",
 ]
@@ -703,6 +705,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "signal-hook-tokio"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "213241f76fb1e37e27de3b6aa1b068a2c333233b59cca6634f634b80a27ecf1e"
+dependencies = [
+ "futures-core",
+ "libc",
+ "signal-hook",
+ "tokio",
+]
+
+[[package]]
 name = "slab"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -713,6 +727,16 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
+
+[[package]]
+name = "socket2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
+dependencies = [
+ "libc",
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "static_assertions"
@@ -771,7 +795,9 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "slab",
+ "socket2",
  "tokio-macros",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

@@ -48,6 +48,7 @@ serde_yml = "0.0.12"
 url = { version = "^2" }
 base64 = { version = "^0" }
 ordered-float = {version = "5.1.0"}
+libc = "0.2.176"
 
 # 将可选依赖分组
 futures-lite = { version = "2.6.0", default-features = false }

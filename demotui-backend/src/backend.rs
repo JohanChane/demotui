@@ -45,7 +45,7 @@ impl BackEnd {
                 }
             }
         });
-        log::info!("backend exit");
+        log::debug!("backend exit");
         Ok(())
     }
 

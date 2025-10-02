@@ -10,9 +10,9 @@ use demotui_frontend::tui::frontend::{self, FrontEnd};
 use demotui_frontend::tui::widget::root::Root;
 use demotui_shared::{
     data::Data,
-    frontend::event::{FrontEndEvent, NEED_RENDER},
+    frontend::event::{EventQuit, FrontEndEvent, NEED_RENDER},
 };
-use tokio::{select, time::sleep};
+use tokio::{select, sync::futures, time::sleep};
 
 use crate::{signals::Signals, term::Term};
 
@@ -78,7 +78,7 @@ impl App {
             }
         }
 
-        log::info!("app exit");
+        log::debug!("app exit");
         Ok(())
     }
 
@@ -108,5 +108,10 @@ impl App {
         // do check
 
         self.render()
+    }
+
+    // TODO
+    pub(crate) fn quit(&mut self, opt: EventQuit) -> ! {
+        Term::goodbye(|| opt.code);
     }
 }

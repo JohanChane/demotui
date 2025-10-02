@@ -13,7 +13,12 @@ pub enum FrontEndEvent {
     Key(KeyEvent),
     Render,
     Resize,
-    // Quit(EventQuit),     // support Ctrl+C to exit app
+    Quit(EventQuit), // support Ctrl+C to exit app
+}
+
+#[derive(Debug, Default)]
+pub struct EventQuit {
+    pub code: i32,
 }
 
 impl FrontEndEvent {

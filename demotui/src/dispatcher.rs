@@ -30,6 +30,7 @@ impl<'a> Dispatcher<'a> {
             FrontEndEvent::Key(key_event) => self.dispatch_key(key_event),
             FrontEndEvent::Render => self.app.render(),
             FrontEndEvent::Resize => self.app.resize(),
+            FrontEndEvent::Quit(opt) => self.app.quit(opt),
         };
 
         Ok(())
@@ -38,7 +39,7 @@ impl<'a> Dispatcher<'a> {
     pub fn dispatch_call(&self, op: FrontEndOp) -> Result<Data> {
         match op {
             FrontEndOp::Info(opt) => {
-                log::info!("data: {}", opt.msg);
+                log::debug!("data: {}", opt.msg);
             }
         };
 
