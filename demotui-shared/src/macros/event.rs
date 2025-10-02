@@ -43,3 +43,17 @@ macro_rules! backend_emit {
         demotui_shared::event::Event::$event.emit();
     };
 }
+
+#[macro_export]
+macro_rules! frontend_act {
+    ($act:ident, $ctx:expr, $opt:expr) => {
+        demotui_frontend::$act::act(&mut $ctx, $opt)
+    };
+}
+
+#[macro_export]
+macro_rules! backend_act {
+    ($act:ident, $ctx:expr, $opt:expr) => {
+        crate::$act::act(&mut $ctx, $opt)
+    };
+}

@@ -7,3 +7,4 @@ pub mod dispatcher;
 mod_flat!(actors);
 
 pub mod context;
+pub mod executor;

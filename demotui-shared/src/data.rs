@@ -102,6 +102,12 @@ impl From<i32> for Data {
     }
 }
 
+impl From<u32> for Data {
+    fn from(value: u32) -> Self {
+        Self::Integer(value as i64)
+    }
+}
+
 impl From<i64> for Data {
     fn from(value: i64) -> Self {
         Self::Integer(value)
