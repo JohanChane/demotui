@@ -1,10 +1,13 @@
 use crate::tui::core::{profile::Profile, template::Template};
 
+#[derive(Default)]
 enum Fouce {
+    #[default]
     Profile,
     Template,
 }
 
+#[derive(Default)]
 pub(crate) struct ProfTmpl {
     pub visible: bool,
     pub profile: Profile,

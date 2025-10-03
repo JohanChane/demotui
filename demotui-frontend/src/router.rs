@@ -1,5 +1,8 @@
+use std::cell::LazyCell;
+
 use anyhow::Result;
-use demotui_shared::layer::Layer;
+use demotui_config::{Chord, Key};
+use demotui_shared::{frontend, layer::Layer};
 
 use crate::tui::frontend::FrontEnd;
 pub(super) struct Router<'a> {
@@ -14,17 +17,21 @@ impl<'a> Router<'a> {
     // pub(super) fn route(&mut self, key: Key) -> Result<bool> {
     //     let layer = self.frontend.layer();
 
-    //     match layer {
-    //         Layer::App => unreachable!(),
+    //     // match layer {
+    //     //     Layer::App => unreachable!(),
 
-    //         Layer::Which => core.which.r#type(),
-    //         // ...
-    //         Layer::Main => {
-    //             // check tab index
-    //             // if prof_tmpl:
-    //             //      prof_tmpl.r#type()
-    //         }
-    //     }
+    //     //     Layer::Popup => self.matches(layer, key)?;
+    //     //     // ...
+
+    //     //     // ...
+    //     //     // Layer::Main => {
+    //     //     //         check tab index
+    //     //     //         if prof_tmpl:
+    //     //     //              prof_tmpl.r#type()
+    //     //     //     }
+
+    //     //     Layer::Which => self.frontend.which.r#type(key)?,
+    //     // }
     // }
 
     // fn matches(&mut self, layer: Layer, key: Key) -> bool {
@@ -33,10 +40,11 @@ impl<'a> Router<'a> {
     //             continue;
     //         }
 
+    //         // get the chord
     //         if on.len() > 1 {
-    //             self.app.core.which.show_with(key, layer);
+    //             self.frontend.which.show_with(key, layer); // 根据已按的 key 显示已经匹配的 chord
     //         } else {
-    //             emit!(Seq(ChordCow::from(chord).into_seq()));
+    //             // emit!(Seq(ChordCow::from(chord).into_seq()));    // emit chord 对应的 run (cmds or ops)
     //         }
     //         return true;
     //     }

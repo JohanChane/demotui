@@ -1,3 +1,4 @@
+#[derive(Default)]
 pub(crate) struct Profile {}
 
 impl Profile {

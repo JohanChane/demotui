@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "demotui", "demotui-backend", "demotui-frontend", "demotui-shared", "demotui-widgets",
+    "demotui", "demotui-backend", "demotui-config", "demotui-frontend", "demotui-shared", "demotui-widgets",
 ]
 
 [workspace.package]

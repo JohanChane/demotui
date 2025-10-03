@@ -1,6 +1,6 @@
 #[derive(Default)]
-pub(crate) struct Input {
+pub(crate) struct Help {
     pub visible: bool,
 }
 
-impl Input {}
+impl Help {}

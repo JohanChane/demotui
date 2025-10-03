@@ -11,6 +11,7 @@ static RX: RoCell<mpsc::UnboundedReceiver<FrontEndEvent>> = RoCell::new();
 pub enum FrontEndEvent {
     Call(FrontEndOp),
     Key(KeyEvent),
+    // Seq(Vec<cmd or ops>)         // TODO: add cmd or ops
     Render,
     Resize,
     Quit(EventQuit), // support Ctrl+C to exit app

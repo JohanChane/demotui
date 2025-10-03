@@ -13,6 +13,7 @@ metadata.workspace = true
 
 [dependencies]
 demotui-shared = {path = "../demotui-shared"}
+demotui-config = {path = "../demotui-config"}
 
 log = { workspace = true }
 env_logger = { workspace = true }

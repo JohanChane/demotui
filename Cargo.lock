@@ -186,11 +186,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "demotui-config"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "crossterm",
+ "demotui-shared",
+]
+
+[[package]]
 name = "demotui-frontend"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "crossterm",
+ "demotui-config",
  "demotui-shared",
  "derive_more",
  "env_logger",
