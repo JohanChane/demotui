@@ -19,9 +19,9 @@ macro_rules! frontend_emit {
         )
         .emit();
     };
-    // (Seq($cmds:expr)) => {
-    //     yazi_shared::event::Event::Seq($cmds).emit();
-    // };
+    (Seq($ops:expr)) => {
+        demotui_shared::frontend::event::FrontEndEvent::Seq($ops).emit();
+    };
     (Key($key:expr)) => {
         demotui_shared::frontend::event::FrontEndEvent::Key($key).emit();
     };

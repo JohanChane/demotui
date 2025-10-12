@@ -1,4 +1,4 @@
-use std::sync::atomic::Ordering;
+use std::{os::unix::fs::OpenOptionsExt, sync::atomic::Ordering};
 
 use anyhow::Result;
 use crossterm::event::{KeyCode, KeyEvent};
@@ -11,6 +11,7 @@ use demotui_shared::{
         event::{FrontEndEvent, NEED_RENDER},
         op::FrontEndOp,
     },
+    frontend_emit,
 };
 
 use crate::app::App;
@@ -28,6 +29,7 @@ impl<'a> Dispatcher<'a> {
         _ = match event {
             FrontEndEvent::Call(op) => self.dispatch_call(op),
             FrontEndEvent::Key(key_event) => self.dispatch_key(key_event),
+            FrontEndEvent::Seq(ops) => self.dispatch_seq(ops),
             FrontEndEvent::Render => self.app.render(),
             FrontEndEvent::Resize => self.app.resize(),
             FrontEndEvent::Quit(opt) => self.app.quit(opt),
@@ -54,6 +56,17 @@ impl<'a> Dispatcher<'a> {
             }
             _ => {}
         }
+        Ok(Data::Nil)
+    }
+
+    pub fn dispatch_seq(&self, mut ops: Vec<FrontEndOp>) -> Result<Data> {
+        if let Some(last_op) = ops.pop() {
+            self.dispatch_call(last_op);
+        }
+        if !ops.is_empty() {
+            frontend_emit!(Seq(ops));
+        }
+
         Ok(Data::Nil)
     }
 
