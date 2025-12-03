@@ -154,101 +154,17 @@ dependencies = [
 
 [[package]]
 name = "demotui"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "anyhow",
  "crossterm",
- "demotui-backend",
- "demotui-frontend",
- "demotui-shared",
- "derive_more",
- "env_logger",
- "futures-lite",
- "libc",
- "log",
- "ratatui",
- "serde",
- "serde_json",
- "signal-hook-tokio",
- "strum",
- "tokio",
-]
-
-[[package]]
-name = "demotui-backend"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "demotui-shared",
- "env_logger",
- "log",
- "tokio",
-]
-
-[[package]]
-name = "demotui-config"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossterm",
- "demotui-shared",
-]
-
-[[package]]
-name = "demotui-frontend"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossterm",
- "demotui-config",
- "demotui-shared",
- "derive_more",
  "env_logger",
  "futures-lite",
  "log",
  "ratatui",
  "serde",
  "serde_json",
- "strum",
  "tokio",
-]
-
-[[package]]
-name = "demotui-shared"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "crossterm",
- "derive_more",
- "env_logger",
- "log",
- "ordered-float",
- "tokio",
-]
-
-[[package]]
-name = "demotui-widgets"
-version = "0.1.0"
-
-[[package]]
-name = "derive_more"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "093242cf7570c207c83073cf82f79706fe7b8317e98620a47d5be7c3d8497678"
-dependencies = [
- "derive_more-impl",
-]
-
-[[package]]
-name = "derive_more-impl"
-version = "2.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bda628edc44c4bb645fbe0f758797143e4e07926f7ebf4e9bdfbd3d2ce621df3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "unicode-xid",
 ]
 
 [[package]]
@@ -484,30 +400,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-traits"
-version = "0.2.19"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
-dependencies = [
- "autocfg",
-]
-
-[[package]]
 name = "object"
 version = "0.37.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "ordered-float"
-version = "5.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f4779c6901a562440c3786d08192c6fbda7c1c2060edd10006b05ee35d10f2d"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
@@ -719,18 +617,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-hook-tokio"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "213241f76fb1e37e27de3b6aa1b068a2c333233b59cca6634f634b80a27ecf1e"
-dependencies = [
- "futures-core",
- "libc",
- "signal-hook",
- "tokio",
-]
-
-[[package]]
 name = "slab"
 version = "0.4.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -741,16 +627,6 @@ name = "smallvec"
 version = "1.15.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
-
-[[package]]
-name = "socket2"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
-dependencies = [
- "libc",
- "windows-sys 0.59.0",
-]
 
 [[package]]
 name = "static_assertions"
@@ -809,9 +685,7 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "slab",
- "socket2",
  "tokio-macros",
- "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -859,12 +733,6 @@ name = "unicode-width"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fc81956842c57dac11422a97c3b8195a1ff727f06e85c84ed2e8aa277c9a0fd"
-
-[[package]]
-name = "unicode-xid"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "wasi"
