@@ -1,12 +1,33 @@
 use super::*;
 
-pub enum Key {}
+pub enum Key {
+    Select,
+    Delete,
+    Preview,
+    Update,
+
+    MoveUp,
+    MoveDown,
+}
 
 impl TryFrom<&KeyEvent> for Key {
     type Error = ();
 
     fn try_from(value: &KeyEvent) -> Result<Self, Self::Error> {
-        todo!()
+        if value.kind != crossterm::event::KeyEventKind::Press {
+            return Err(());
+        }
+        Ok(match value.code {
+            KeyCode::Enter => Self::Select,
+            KeyCode::Char('d') => Self::Delete,
+            KeyCode::Char('p') => Self::Preview,
+            KeyCode::Char('u') => Self::Update,
+
+            KeyCode::Down => Self::MoveDown,
+            KeyCode::Up => Self::MoveUp,
+
+            _ => return Err(()),
+        })
     }
 }
 
@@ -44,26 +65,25 @@ impl TabContent for Profile {
                     ListItem::new(Line::from(vec![
                         Span::raw(value),
                         Span::raw("("),
-                        Span::raw(""), //.style(Theme::get().profile_tab.update_interval),
+                        Span::raw("").style(Theme::get().profile_tab.update_interval),
                         Span::raw(")"),
                     ]))
                 }),
-        );
-        // .block(
-        //     Raw::Block::default()
-        //         .borders(Raw::Borders::ALL)
-        //         .border_style(if is_fouced {
-        //             Theme::get().list.block_selected
-        //         } else {
-        //             Theme::get().list.block_unselected
-        //         })
-        //         .title(self.title.as_str()),
-        // )
-        // .highlight_style(if is_fouced {
-        //     Theme::get().list.highlight
-        // } else {
-        //     Theme::get().list.unhighlight
-        // })
+        )
+        .block(
+            Block::bordered()
+                .border_style(if self.is_focused {
+                    Theme::get().list.block_selected
+                } else {
+                    Theme::get().list.block_unselected
+                })
+                .title(Self::TITLE),
+        )
+        .highlight_style(if self.is_focused {
+            Theme::get().list.highlight
+        } else {
+            Theme::get().list.unhighlight
+        });
 
         f.render_stateful_widget(list, area, state);
     }

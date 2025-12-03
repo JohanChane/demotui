@@ -89,22 +89,22 @@ impl TabContent for Template {
                         .is_none_or(|pat| value.contains(pat))
                         .then_some(value.as_str())
                 }),
-        );
-        // .block(
-        //     Raw::Block::default()
-        //         .borders(Raw::Borders::ALL)
-        //         .border_style(if is_fouced {
-        //             Theme::get().list.block_selected
-        //         } else {
-        //             Theme::get().list.block_unselected
-        //         })
-        //         .title(self.title.as_str()),
-        // )
-        // .highlight_style(if is_fouced {
-        //     Theme::get().list.highlight
-        // } else {
-        //     Theme::get().list.unhighlight
-        // });
+        )
+        .block(
+            Block::bordered()
+                .border_style(if self.is_focused {
+                    Theme::get().list.block_selected
+                } else {
+                    Theme::get().list.block_unselected
+                })
+                .title(Self::TITLE),
+        )
+        .highlight_style(if self.is_focused {
+            Theme::get().list.highlight
+        } else {
+            Theme::get().list.unhighlight
+        });
+        
         f.render_stateful_widget(list, area, state);
     }
 }

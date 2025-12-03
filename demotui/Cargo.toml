@@ -18,6 +18,7 @@ futures-lite = { workspace = true }
 
 
 [features]
+customized-theme = []
 # tui = [
 #   "dep:ratatui",
 #   "dep:crossterm",

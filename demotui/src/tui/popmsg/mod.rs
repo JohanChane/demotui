@@ -10,5 +10,4 @@ mod dev {
 
 pub mod prelude {
     pub use super::input::Input;
-    pub use crate::tui::widget::popmsg::MsgBuilder;
 }
