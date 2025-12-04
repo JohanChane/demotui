@@ -18,7 +18,7 @@ pub struct FileTab {
 }
 
 impl FileTab {
-   pub const TITLES: [&str; 2] = [profile::Profile::TITLE, template::Template::TITLE];
+    pub const TITLES: [&str; 2] = [profile::Profile::TITLE, template::Template::TITLE];
 }
 
 impl Default for FileTab {

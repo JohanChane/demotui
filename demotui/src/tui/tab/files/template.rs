@@ -104,7 +104,7 @@ impl TabContent for Template {
         } else {
             Theme::get().list.unhighlight
         });
-        
+
         f.render_stateful_widget(list, area, state);
     }
 }
