@@ -45,13 +45,17 @@ where
             self.content
                 .handle_key_event(key, &mut self.tasks, &mut self.state)
         }
-        if let Some(f) = self.tasks.try_join_next() {
-            f.unwrap()(self.content_mut()).unwrap()
-        }
     }
 
     fn render(&mut self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
         self.content.render(f, area, &mut self.state);
+    }
+
+    fn sync(&mut self) -> anyhow::Result<()> {
+        while let Some(f) = self.tasks.try_join_next() {
+            f?(self.content_mut())?;
+        }
+        Ok(())
     }
 }
 

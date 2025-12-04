@@ -56,4 +56,9 @@ impl TuiWidget for FileTab {
         self.profile.render(f, hori[0]);
         self.template.render(f, hori[1]);
     }
+
+    fn sync(&mut self) -> anyhow::Result<()> {
+        self.template.sync()?;
+        self.profile.sync()
+    }
 }

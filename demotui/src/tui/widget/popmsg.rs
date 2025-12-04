@@ -18,10 +18,7 @@ pub struct PopUp {
 
 impl PopUp {
     pub fn check(&mut self) -> bool {
-        if let Ok(content) = PAIR.lock().unwrap().1.try_recv() {
-            self.content.push(content.into());
-        }
-        return !self.content.is_empty();
+        !self.content.is_empty()
     }
 }
 
@@ -44,6 +41,13 @@ impl TuiWidget for PopUp {
         if let Some(cell) = self.content.last_mut() {
             cell.render(f);
         }
+    }
+
+    fn sync(&mut self) -> anyhow::Result<()> {
+        while let Ok(content) = PAIR.lock().unwrap().1.try_recv() {
+            self.content.push(content.into());
+        }
+        Ok(())
     }
 }
 

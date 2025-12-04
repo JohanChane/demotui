@@ -61,7 +61,7 @@ impl Config {
         })
     }
     pub fn save(&self) -> Result<()> {
-        todo!()
+        self.data.lock().unwrap().to_file()
     }
 }
 
@@ -105,6 +105,7 @@ pub fn init_config() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "customized-theme")]
 pub fn theme_path() -> PathBuf {
     DATA_DIR.get().unwrap().join(defs::TEMPLATE_DIR)
 }

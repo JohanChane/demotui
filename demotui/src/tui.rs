@@ -10,6 +10,7 @@ mod widget;
 trait TuiWidget {
     fn handle_key_event(&mut self, kv: &KeyEvent);
     fn render(&mut self, f: &mut ratatui::Frame, area: ratatui::layout::Rect);
+    fn sync(&mut self) -> anyhow::Result<()>;
 }
 
 // 50fps
@@ -64,6 +65,11 @@ impl App {
             }
         }
     }
+    fn sync(&mut self) {
+        // Todo: send err to popup
+        self.popup.sync();
+        self.file_tab.sync();
+    }
     fn render(&mut self, f: &mut ratatui::Frame) {
         use ratatui::prelude::{Constraint, Layout};
         // Todo:  将原本的tabbar和statusbar移过来
@@ -101,6 +107,7 @@ impl App {
 
         while !self.should_quit {
             terminal.draw(|f| self.render(f))?;
+            self.sync();
 
             let ev = {
                 use futures_lite::StreamExt as _;
