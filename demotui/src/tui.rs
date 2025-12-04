@@ -1,10 +1,12 @@
 use crossterm::event::KeyEvent;
 use tab::prelude::*;
+use utils::*;
 use widget::popmsg::PopUp;
 
 mod popmsg;
 mod tab;
 mod theme;
+mod utils;
 mod widget;
 
 trait TuiWidget {
@@ -49,6 +51,7 @@ impl App {
                         self.tab_index += 1
                     }
                 }
+                KeyCode::Char('q') => self.should_quit = true,
                 _ => return false,
             }
             return true;
@@ -180,5 +183,12 @@ fn the_egg(key: crossterm::event::KeyCode) {
 
 pub fn init() -> anyhow::Result<()> {
     theme::Theme::load();
+    raw_mode::setup()?;
+    raw_mode::set_panic_hook();
+    Ok(())
+}
+
+pub fn restore() -> anyhow::Result<()> {
+    raw_mode::restore()?;
     Ok(())
 }

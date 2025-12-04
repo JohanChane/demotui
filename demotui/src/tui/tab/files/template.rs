@@ -56,7 +56,8 @@ impl TabContent for Template {
                 let name = if let Some(idx) = state.selected() {
                     self.templates[idx].clone()
                 } else {
-                    return;
+                    // return;
+                    "Test Only".to_owned()
                 };
                 let task = async {
                     println!("Start {}", name);

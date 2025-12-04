@@ -66,7 +66,12 @@ impl Config {
 }
 
 pub fn init(base_path: Option<PathBuf>) -> Result<()> {
-    let path = if let Some(path) = base_path {
+    let path = {
+        let path = if let Some(path) = base_path {
+            path
+        } else {
+            load_home_dir()?
+        };
         ensure!(path.exists(), "{} does NOT exists", path.display());
         ensure!(path.is_dir(), "{} is not a dir", path.display());
 
@@ -74,8 +79,6 @@ pub fn init(base_path: Option<PathBuf>) -> Result<()> {
             .canonicalize()
             .context(format!("Failed to canonicalize path: {}", path.display()))?;
         std::path::absolute(&path).context(format!("{} is not an absolute path", path.display()))?
-    } else {
-        load_home_dir()?
     };
 
     if DATA_DIR.set(path).is_err() || _CONFIG.set(Config::load()?).is_err() {

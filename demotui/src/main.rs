@@ -7,4 +7,6 @@ fn main() {
 
     let app = tui::App::new();
     app.serve().unwrap();
+
+    tui::restore().unwrap();
 }
