@@ -1,5 +1,5 @@
 #[cfg(feature = "customized-theme")]
-use crate::utils::consts::THEME_PATH;
+use crate::config::theme_path;
 #[cfg(feature = "customized-theme")]
 use std::sync::Once;
 
@@ -29,9 +29,7 @@ impl Theme {
         #[cfg(feature = "customized-theme")]
         if RELOAD_ON_GET.is_completed() {
             if let Ok(theme) = || -> anyhow::Result<Self> {
-                Ok(serde_yml::from_reader(std::fs::File::open(
-                    THEME_PATH.as_path(),
-                )?)?)
+                Ok(serde_yml::from_reader(std::fs::File::open(theme_path())?)?)
             }() {
                 let mut lock = GLOBAL_THEME.write().unwrap();
                 let _ = std::mem::replace(&mut *lock, theme);
@@ -49,24 +47,20 @@ impl Theme {
             let mut lock = GLOBAL_THEME.write().unwrap();
             let _ = std::mem::replace(&mut *lock, theme);
         };
+        let path = theme_path();
         match || -> anyhow::Result<Self> {
-            Ok(serde_yml::from_reader(std::fs::File::open(
-                THEME_PATH.as_path(),
-            )?)?)
+            Ok(serde_yml::from_reader(std::fs::File::open(&path)?)?)
         }() {
             Ok(theme) => set(theme),
             Err(err) => {
                 log::warn!("Failed to load theme: {err}");
                 log::warn!("Loading default theme");
-                log::warn!("Recreate theme file at {}", THEME_PATH.display());
+                log::warn!("Recreate theme file at {}", path.display());
                 let theme = Self::default();
                 if let Err(e) = || -> anyhow::Result<()> {
-                    Ok(serde_yml::to_writer(
-                        std::fs::File::create(THEME_PATH.as_path())?,
-                        &theme,
-                    )?)
+                    Ok(serde_yml::to_writer(std::fs::File::create(&path)?, &theme)?)
                 }() {
-                    log::error!("Failed to create theme file at {}", THEME_PATH.display());
+                    log::error!("Failed to create theme file at {}", path.display());
                     log::error!("due to {e}")
                 }
                 set(theme)

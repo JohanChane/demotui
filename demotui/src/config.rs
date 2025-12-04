@@ -105,6 +105,10 @@ pub fn init_config() -> Result<()> {
     Ok(())
 }
 
+pub fn theme_path() -> PathBuf {
+    DATA_DIR.get().unwrap().join(defs::TEMPLATE_DIR)
+}
+
 load_save!(BasicInfo, defs::BASIC_FILE, no_save);
 load_save!(ConfigFile, defs::CONFIG_FILE);
 load_save!(ProfileManager, defs::DATA_FILE);

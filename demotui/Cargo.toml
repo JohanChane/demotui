@@ -19,7 +19,7 @@ futures-lite = { workspace = true }
 
 
 [features]
-customized-theme = []
+customized-theme = ["ratatui/serde"]
 # tui = [
 #   "dep:ratatui",
 #   "dep:crossterm",
@@ -29,4 +29,4 @@ customized-theme = []
 #   "dep:strum",
 # ]
 
-# default = ["tui"]
+default = ["customized-theme"]

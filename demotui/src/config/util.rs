@@ -1,4 +1,4 @@
-use anyhow::{Context, Result,bail};
+use anyhow::{Context, Result, bail};
 
 pub mod defs {
     pub const CONFIG_FILE: &str = "config.yaml";

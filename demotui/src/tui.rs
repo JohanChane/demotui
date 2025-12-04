@@ -170,3 +170,8 @@ fn the_egg(key: crossterm::event::KeyCode) {
         log::debug!("You've found the egg!")
     }
 }
+
+pub fn init() -> anyhow::Result<()> {
+    theme::Theme::load();
+    Ok(())
+}
