@@ -9,6 +9,8 @@ mod theme;
 mod utils;
 mod widget;
 
+pub use theme::Theme;
+
 trait TuiWidget {
     fn handle_key_event(&mut self, kv: &KeyEvent);
     fn render(&mut self, f: &mut ratatui::Frame, area: ratatui::layout::Rect);

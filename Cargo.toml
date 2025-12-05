@@ -71,9 +71,9 @@ libc = "0.2.176"
 
 # 将可选依赖分组
 futures-lite = { version = "2.6.0", default-features = false }
-strum = { version = "0.26.3", features = ["derive"] }
+# strum = { version = "0.26.3", features = ["derive"] }
 derive_more = { version = "2", default-features = false, features = ["debug"] }
-tokio = { version = "1.40.0", features = [
+tokio = { version = "1.48.0", features = [
     "rt",
     "rt-multi-thread",
     "macros",

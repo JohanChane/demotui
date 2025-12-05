@@ -1,12 +1,20 @@
+mod cli;
 mod config;
 mod tui;
 
 fn main() {
-    config::init(None).unwrap();
+    let Some(cmd) = cli::from_env().handle_early_exit() else {
+        return;
+    };
+
+    if let Err(e) = config::init(cmd.config_dir) {
+        eprintln!("Failed to load Config");
+        eprintln!("{}", e)
+    }
+
     tui::init().unwrap();
 
-    let app = tui::App::new();
-    app.serve().unwrap();
+    tui::App::new().serve().unwrap();
 
     tui::restore().unwrap();
 }

@@ -19,8 +19,8 @@ mod core;
 #[macro_use]
 mod util;
 mod database;
-// #[cfg(feature = "migration_v0_2_3")]
-// pub mod v0_2_3;
+#[cfg(feature = "migration_v0_2_3")]
+pub mod v0_2_3;
 
 pub const CONFIG: Wrapper = Wrapper;
 
@@ -68,7 +68,7 @@ impl Config {
 pub fn init(base_path: Option<PathBuf>) -> Result<()> {
     let path = {
         let path = if let Some(path) = base_path {
-            path
+            path.to_path_buf()
         } else {
             load_home_dir()?
         };
