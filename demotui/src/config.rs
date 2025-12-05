@@ -7,8 +7,8 @@
 //! * `Folder` templates/
 
 use anyhow::{Context, Result, ensure};
-pub use core::*;
-pub use database::*;
+use core::*;
+use database::*;
 use std::{
     path::PathBuf,
     sync::{Mutex, OnceLock},
@@ -29,8 +29,10 @@ static _CONFIG: OnceLock<Config> = OnceLock::new();
 
 pub struct Wrapper;
 
-impl AsRef<Config> for Wrapper {
-    fn as_ref(&self) -> &Config {
+impl std::ops::Deref for Wrapper {
+    type Target = Config;
+
+    fn deref(&self) -> &Self::Target {
         _CONFIG.get().expect("uninited")
     }
 }

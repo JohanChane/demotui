@@ -17,4 +17,6 @@ fn main() {
     tui::App::new().serve().unwrap();
 
     tui::restore().unwrap();
+
+    config::CONFIG.save().unwrap();
 }
