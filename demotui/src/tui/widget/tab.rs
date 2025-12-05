@@ -54,7 +54,7 @@ where
     fn sync(&mut self) {
         while let Some(f) = self.tasks.try_join_next() {
             if let Err(e) = f.unwrap()(self.content_mut()) {
-                todo!()
+                super::popmsg::Confirm::err(e);
             };
         }
     }

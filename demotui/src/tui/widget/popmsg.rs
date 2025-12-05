@@ -6,9 +6,11 @@ use std::sync::{LazyLock, Mutex, mpsc};
 use tokio::sync::oneshot::Sender;
 
 mod builder;
+mod confirm;
 mod wrapper;
 
 pub use builder::MsgBuilder;
+pub use confirm::Confirm;
 use wrapper::{Prompt, Wrapped};
 
 static PAIR: LazyLock<Mutex<(mpsc::Sender<Wrapped>, mpsc::Receiver<Wrapped>)>> =
