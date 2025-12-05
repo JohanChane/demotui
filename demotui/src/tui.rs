@@ -12,7 +12,7 @@ mod widget;
 trait TuiWidget {
     fn handle_key_event(&mut self, kv: &KeyEvent);
     fn render(&mut self, f: &mut ratatui::Frame, area: ratatui::layout::Rect);
-    fn sync(&mut self) -> anyhow::Result<()>;
+    fn sync(&mut self);
 }
 
 // 50fps
@@ -69,7 +69,6 @@ impl App {
         }
     }
     fn sync(&mut self) {
-        // Todo: send err to popup
         self.popup.sync();
         self.file_tab.sync();
     }

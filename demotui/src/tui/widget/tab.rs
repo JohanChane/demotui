@@ -51,11 +51,12 @@ where
         self.content.render(f, area, &mut self.state);
     }
 
-    fn sync(&mut self) -> anyhow::Result<()> {
+    fn sync(&mut self) {
         while let Some(f) = self.tasks.try_join_next() {
-            f?(self.content_mut())?;
+            if let Err(e) = f.unwrap()(self.content_mut()) {
+                todo!()
+            };
         }
-        Ok(())
     }
 }
 
@@ -90,4 +91,8 @@ where
 /// ```
 pub fn wrapper<C>(f: impl FnOnce(&mut C) -> anyhow::Result<()> + 'static + Send) -> CallBack<C> {
     Box::new(f)
+}
+
+pub fn canceled<C>() -> CallBack<C> {
+    wrapper(|_| anyhow::bail!("Task Canceled"))
 }

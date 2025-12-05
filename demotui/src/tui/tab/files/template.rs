@@ -66,7 +66,7 @@ impl TabContent for Template {
                         .with_prompt("This is used to test input widget".to_owned())
                         .build_and_send();
                     let Ok(input_content) = rx.await else {
-                        return wrapper(|_| anyhow::bail!("Task Canceled"));
+                        return canceled();
                     };
                     wrapper(move |content: &mut Self| {
                         println!("Done {}, Input: {}", name, input_content);
