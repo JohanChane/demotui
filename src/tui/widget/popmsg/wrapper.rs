@@ -12,7 +12,7 @@ pub trait Wrapper {
     fn send(self: Box<Self>);
 }
 
-impl<C: Msg<Result = R>, R> Wrapper for Instance<C, R> {
+impl<C: Msg> Wrapper for Instance<C> {
     fn handle_key_event(&mut self, kv: &KeyEvent) -> Route {
         if matches!(kv.code, KeyCode::Tab) {
             self.is_focus_prompt = (!self.is_focus_prompt) && self.prompt.is_some()

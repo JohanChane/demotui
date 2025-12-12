@@ -11,7 +11,7 @@ pub mod defs {
     pub const TEMPLATE_DIR: &str = "templates";
 }
 
-pub fn load_home_dir() -> Result<std::path::PathBuf> {
+pub(super) fn load_home_dir() -> Result<std::path::PathBuf> {
     use std::{env, path};
     let data_dir = env::current_exe()
         .context("Err loading exe_file_path")?

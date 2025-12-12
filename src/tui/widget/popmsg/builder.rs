@@ -39,7 +39,7 @@ impl<C: Msg<Result = R> + Send + 'static, R: Send + 'static> MsgBuilder<C> {
             is_focus_prompt: false,
         };
 
-        PAIR.lock().unwrap().0.send(Box::new(cell)).unwrap();
+        PAIR.0.send(Box::new(cell)).unwrap();
 
         rx
     }

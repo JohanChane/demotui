@@ -67,7 +67,7 @@ pub enum ServiceController {
     OpenRc,
 }
 impl ServiceController {
-    pub fn apply_args<'a>(
+    pub fn args<'a>(
         &self,
         work_type: &'a str,
         service_name: &'a str,
@@ -78,7 +78,7 @@ impl ServiceController {
             ServiceController::Systemd if is_user => vec!["--user", work_type, service_name],
             ServiceController::Systemd => vec![work_type, service_name],
 
-            // rc-service start service --user
+            // rc-service service start --user
             ServiceController::OpenRc if is_user => vec![service_name, work_type, "--user"],
             ServiceController::OpenRc => vec![service_name, work_type],
 

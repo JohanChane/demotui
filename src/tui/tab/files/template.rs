@@ -66,11 +66,10 @@ impl TabContent for Template {
                         .with_prompt("This is used to test input widget".to_owned())
                         .build_and_send();
                     let Ok(input_content) = rx.await else {
-                        return canceled();
+                        return do_nothing();
                     };
-                    wrapper(move |content: &mut Self| {
+                    wrapper(move |_| {
                         println!("Done {}, Input: {}", name, input_content);
-                        Ok(())
                     })
                 };
                 task_set.spawn(task);

@@ -1,7 +1,7 @@
-mod files;
-
 mod dev {
-    pub use crate::tui::widget::tab::{FutureSet, Tab, TabContent, canceled, wrapper};
+    pub use crate::tui::widget::tab::{
+        FutureSet, FutureSetExt, Tab, TabContent, do_nothing, wrapper,
+    };
     pub use crossterm::event::{KeyCode, KeyEvent};
     pub use ratatui::prelude::{Frame, Rect};
     pub use ratatui::widgets::{Block, List, ListState, StatefulWidget};
@@ -9,6 +9,28 @@ mod dev {
     pub use crate::tui::popmsg::prelude::*;
     pub use crate::tui::theme::Theme;
 }
+
+macro_rules! tri {
+    ($e:expr) => {
+        match $e {
+            Ok(v) => v,
+            Err(e) => {
+                crate::tui::widget::popmsg::Confirm::err(e);
+                return do_nothing();
+            }
+        }
+    };
+    ($e:expr, or_cancel) => {
+        match $e {
+            Ok(v) => v,
+            Err(_) => {
+                return do_nothing();
+            }
+        }
+    };
+}
+
+mod files;
 
 pub mod prelude {
     pub use super::files::FileTab;

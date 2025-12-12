@@ -13,8 +13,11 @@ pub use builder::MsgBuilder;
 pub use confirm::Confirm;
 use wrapper::{Prompt, Wrapped};
 
-static PAIR: LazyLock<Mutex<(mpsc::Sender<Wrapped>, mpsc::Receiver<Wrapped>)>> =
-    LazyLock::new(|| Mutex::new(mpsc::channel()));
+static PAIR: LazyLock<(mpsc::Sender<Wrapped>, Mutex<mpsc::Receiver<Wrapped>>)> =
+    LazyLock::new(|| {
+        let (tx, rx) = mpsc::channel();
+        (tx, rx.into())
+    });
 
 pub enum Route {
     Keep,
@@ -59,24 +62,22 @@ impl TuiWidget for PopUp {
     }
 
     fn render(&mut self, f: &mut Frame, _: Rect) {
-        if let Some(cell) = self.content.last_mut() {
-            cell.render(f);
-        }
+        self.content.iter_mut().for_each(|c| c.render(f));
     }
 
     fn sync(&mut self) {
-        while let Ok(content) = PAIR.lock().unwrap().1.try_recv() {
+        while let Ok(content) = PAIR.1.lock().unwrap().try_recv() {
             self.content.push(content.into());
         }
     }
 }
 
-struct Instance<C: Msg<Result = R>, R> {
+struct Instance<C: Msg> {
     content: C,
 
     title: String,
     prompt: Option<Prompt>,
     is_focus_prompt: bool,
 
-    tx: Sender<R>,
+    tx: Sender<C::Result>,
 }

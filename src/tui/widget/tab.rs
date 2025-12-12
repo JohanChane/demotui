@@ -18,8 +18,24 @@ pub trait TabContent: 'static {
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State);
 }
 
-type CallBack<C> = Box<dyn FnOnce(&mut C) -> anyhow::Result<()> + Send>;
+type CallBack<C> = Box<dyn FnOnce(&mut C) + Send>;
 pub type FutureSet<C> = tokio::task::JoinSet<CallBack<C>>;
+
+pub trait FutureSetExt<C>: Future<Output = CallBack<C>>
+where
+    Self: Sized + Send + 'static,
+    C: 'static,
+{
+    fn spawn(self, set: &mut FutureSet<C>) {
+        set.spawn(self);
+    }
+}
+impl<F, C> FutureSetExt<C> for F
+where
+    F: Future<Output = CallBack<C>> + Send + 'static,
+    C: 'static,
+{
+}
 
 pub struct Tab<C: TabContent> {
     content: C,
@@ -53,9 +69,7 @@ where
 
     fn sync(&mut self) {
         while let Some(f) = self.tasks.try_join_next() {
-            if let Err(e) = f.unwrap()(self.content_mut()) {
-                super::popmsg::Confirm::err(e);
-            };
+            f.unwrap()(self.content_mut())
         }
     }
 }
@@ -84,15 +98,14 @@ where
 ///     tokio::time::sleep(std::time::Duration::from_micros(10)).await;
 ///     wrapper(move |content: &mut Self| {
 ///         println!("Done {}", name);
-///         Ok(())
 ///     })
 /// };
 /// task_set.spawn(task);
 /// ```
-pub fn wrapper<C>(f: impl FnOnce(&mut C) -> anyhow::Result<()> + 'static + Send) -> CallBack<C> {
+pub fn wrapper<C>(f: impl FnOnce(&mut C) + 'static + Send) -> CallBack<C> {
     Box::new(f)
 }
 
-pub fn canceled<C>() -> CallBack<C> {
-    wrapper(|_| anyhow::bail!("Task Canceled"))
+pub fn do_nothing<C>() -> CallBack<C> {
+    wrapper(|_| ())
 }

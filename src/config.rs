@@ -18,7 +18,7 @@ use util::*;
 mod core;
 #[macro_use]
 mod util;
-mod database;
+pub mod database;
 #[cfg(feature = "migration_v0_2_3")]
 pub mod v0_2_3;
 
@@ -113,6 +113,16 @@ pub fn init_config() -> Result<()> {
 #[cfg(feature = "customized-theme")]
 pub fn theme_path() -> PathBuf {
     DATA_DIR.get().unwrap().join(defs::TEMPLATE_DIR)
+}
+pub fn profile_path() -> PathBuf {
+    DATA_DIR.get().unwrap().join(defs::PROFILE_DIR)
+}
+pub fn template_path() -> PathBuf {
+    DATA_DIR.get().unwrap().join(defs::TEMPLATE_DIR)
+}
+pub fn load_basic() -> anyhow::Result<serde_yml::Mapping> {
+    let fp = std::fs::File::create(DATA_DIR.get().unwrap().join(defs::BASIC_FILE))?;
+    serde_yml::from_reader(fp).map_err(|e| e.into())
 }
 
 load_save!(BasicInfo, defs::BASIC_FILE, no_save);

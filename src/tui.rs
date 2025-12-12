@@ -1,15 +1,15 @@
 use crossterm::event::KeyEvent;
 use utils::*;
 
+mod app;
 mod popmsg;
 mod tab;
 mod theme;
 mod utils;
 mod widget;
-mod app;
 
-pub use theme::Theme;
 pub use app::App;
+pub use theme::Theme;
 
 trait TuiWidget {
     fn handle_key_event(&mut self, kv: &KeyEvent);
