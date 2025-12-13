@@ -55,14 +55,14 @@ impl Theme {
             Err(err) => {
                 log::warn!("Failed to load theme: {err}");
                 log::warn!("Loading default theme");
-                log::warn!("Recreate theme file at {}", path.display());
                 let theme = Self::default();
-                if let Err(e) = || -> anyhow::Result<()> {
-                    Ok(serde_yml::to_writer(std::fs::File::create(&path)?, &theme)?)
-                }() {
-                    log::error!("Failed to create theme file at {}", path.display());
-                    log::error!("due to {e}")
-                }
+                // log::warn!("Recreate theme file at {}", path.display());
+                // if let Err(e) = || -> anyhow::Result<()> {
+                //     Ok(serde_yml::to_writer(std::fs::File::create(&path)?, &theme)?)
+                // }() {
+                //     log::error!("Failed to create theme file at {}", path.display());
+                //     log::error!("due to {e}")
+                // }
                 set(theme)
             }
         }

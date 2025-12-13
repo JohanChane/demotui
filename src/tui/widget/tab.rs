@@ -1,3 +1,14 @@
+//! How to use?
+//! ``` no_run
+//! struct Content {/* */};
+//!
+//! impl BasicTabContent for Content {/* */}
+//! impl TabContent for Content {/* */}
+//!
+//! struct TheTab(Tab<Content>);
+//! new_type_impl_tuiwidget!(TheTab);
+//! ```
+
 use crate::tui::TuiWidget;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::{Frame, Rect};
@@ -7,6 +18,25 @@ pub trait BasicTabContent: 'static {
     type State;
 
     const TITLE: &str;
+}
+
+type CallBack<C> = Box<dyn FnOnce(&mut C) + Send>;
+pub type FutureSet<C> = tokio::task::JoinSet<CallBack<C>>;
+
+pub trait FutureSetExt<C>: Future<Output = CallBack<C>>
+where
+    Self: Sized + Send + 'static,
+    C: 'static,
+{
+    fn spawn_at(self, set: &mut FutureSet<C>) {
+        set.spawn(self);
+    }
+}
+impl<F, C> FutureSetExt<C> for F
+where
+    F: Future<Output = CallBack<C>> + Send + 'static,
+    C: 'static,
+{
 }
 
 pub trait TabContent: BasicTabContent {
@@ -21,25 +51,6 @@ pub trait TabContent: BasicTabContent {
     );
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State);
-}
-
-type CallBack<C> = Box<dyn FnOnce(&mut C) + Send>;
-pub type FutureSet<C> = tokio::task::JoinSet<CallBack<C>>;
-
-pub trait FutureSetExt<C>: Future<Output = CallBack<C>>
-where
-    Self: Sized + Send + 'static,
-    C: 'static,
-{
-    fn spawn(self, set: &mut FutureSet<C>) {
-        set.spawn(self);
-    }
-}
-impl<F, C> FutureSetExt<C> for F
-where
-    F: Future<Output = CallBack<C>> + Send + 'static,
-    C: 'static,
-{
 }
 
 pub struct Tab<C: TabContent> {
@@ -65,6 +76,7 @@ where
 
     fn sync(&mut self) {
         while let Some(f) = self.tasks.try_join_next() {
+            // SAFETY: panic happens only when a task is canceled(not gonna to happen) or paniced
             f.unwrap()(&mut self.content)
         }
     }

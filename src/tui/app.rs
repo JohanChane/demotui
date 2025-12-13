@@ -36,6 +36,7 @@ impl App {
 
             let ev = {
                 use futures_lite::StreamExt as _;
+                // this tick here ensures that fps is stable
                 let mut tick = Box::pin(invt.tick());
                 let ev = tokio::select! {
                     Some(ev) = events.next() => ev?,
@@ -61,6 +62,14 @@ impl App {
         Ok(())
     }
 
+    /// KeyEvent Route:
+    /// ``` md
+    /// Keyevent
+    ///     │  if popup
+    ///     ├──────► PopUp
+    ///     │
+    ///     └─► App ─► Tab
+    /// ```
     fn handle_key_event(&mut self, kv: &KeyEvent) {
         if self.popup.check() {
             self.popup.handle_key_event(kv);
@@ -73,7 +82,7 @@ impl App {
     }
     fn render(&mut self, f: &mut ratatui::Frame) {
         use ratatui::prelude::{Constraint, Layout};
-        // Todo:  将原本的tabbar和statusbar移过来
+        // Todo:  将原本的statusbar移过来
 
         // split terminal into three part
         let chunks = Layout::default()
@@ -95,30 +104,29 @@ impl App {
             self.popup.render(f, Default::default());
         }
     }
+    /// This is the `App` layer, currently only handle Tab switch, Quitting
     fn handle_global_kv(&mut self, kv: &KeyEvent) -> bool {
         if matches!(kv.kind, crossterm::event::KeyEventKind::Press) {
             use crossterm::event::KeyCode;
             const TAB_COUNT: u8 = 2;
             match kv.code {
-                KeyCode::Char(c) if c.is_ascii_digit() && c != '0' => {
-                    if let Some(idx) = c.to_digit(10) {
-                        self.tab_index = (idx as u8).min(TAB_COUNT) - 1
-                    }
-                }
+                // Only match key we want
+                KeyCode::Char(c @ '1'..='2') => self.tab_index = c as u8 - '1' as u8,
                 KeyCode::Tab => {
                     if self.tab_index == TAB_COUNT - 1 {
                         self.tab_index = 0
                     } else {
                         self.tab_index += 1
                     }
-                    match self.tab_index {
-                        0 => self.file_tab.focused_on_profile(),
-                        1 => self.file_tab.focused_on_template(),
-                        _ => {}
-                    }
                 }
                 KeyCode::Char('q') => self.should_quit = true,
                 _ => return false,
+            }
+            // Silly helper for dualtab
+            match self.tab_index {
+                0 => self.file_tab.focused_on_profile(),
+                1 => self.file_tab.focused_on_template(),
+                _ => {}
             }
             return true;
         }
@@ -130,6 +138,7 @@ impl App {
     }
 }
 
+/// each item should represent for one tab
 fn render_tabbar(
     titles: impl Iterator<Item = &'static str>,
     selected: u8,
@@ -141,13 +150,14 @@ fn render_tabbar(
     use ratatui::widgets::{Block, Tabs};
 
     let titles = titles.map(|s| s.set_style(Theme::get().bars.tabbar_text));
-    let this = Tabs::new(titles)
+    let widget = Tabs::new(titles)
         .block(Block::bordered())
         .highlight_style(Theme::get().bars.tabbar_highlight)
         .select(Some(selected as usize));
-    f.render_widget(this, area);
+    f.render_widget(widget, area);
 }
 
+/// Ha! Magic Code!
 #[cfg(debug_assertions)]
 fn the_egg(key: crossterm::event::KeyCode) {
     use crossterm::event::KeyCode;

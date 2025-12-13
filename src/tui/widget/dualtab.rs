@@ -21,7 +21,7 @@ where
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State, is_focused: bool);
 }
-
+/// Helper trait for [`DualTabContent`]
 pub trait DualTabContentMate: BasicTabContent
 where
     Self: Sized,

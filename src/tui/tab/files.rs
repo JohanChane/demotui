@@ -3,7 +3,7 @@ use ratatui::{
     widgets::ListItem,
 };
 
-use crate::tui::TuiWidget;
+use crate::new_type_impl_tuiwidget;
 
 use super::dev::*;
 
@@ -11,6 +11,10 @@ use super::dev::*;
 mod profile;
 mod template;
 
+/// This can only be [DualTab], because [Template] needs to update [Profile]
+///
+/// [Template]: template::Template
+/// [Profile]: profile::Profile
 #[derive(Default)]
 pub struct FileTab(DualTab<profile::Profile, template::Template>);
 
@@ -25,16 +29,4 @@ impl FileTab {
     }
 }
 
-impl TuiWidget for FileTab {
-    fn handle_key_event(&mut self, kv: &KeyEvent) {
-        self.0.handle_key_event(kv);
-    }
-
-    fn render(&mut self, f: &mut ratatui::Frame, area: ratatui::layout::Rect) {
-        self.0.render(f, area);
-    }
-
-    fn sync(&mut self) {
-        self.0.sync();
-    }
-}
+new_type_impl_tuiwidget!(FileTab);

@@ -53,12 +53,12 @@ macro_rules! get_name {
     };
 }
 
-// The Only reason why I use two functions to `sync` is that
-// I except modifying Self (what we do in `wrapper`) is
-// fast and infallable
-//
-// Tasks should be done in async{} and left only values that
-// apply to Self
+/// The Only reason why I use two functions to `sync` is that
+/// I except modifying Self (what we do in `wrapper`) is
+/// fast and infallable
+///
+/// Tasks should be done in async{} and left only values that
+/// apply to Self
 macro_rules! profile_sync {
     () => {{
         let (name, atime) = super::profile::get_profiles_with_readable_atime();
@@ -93,7 +93,7 @@ impl DualTabContent for Profile {
     type Mate = super::template::Template;
 
     fn init(&mut self, task_set: &mut FutureSet<(Self, Self::Mate)>, _: &mut Self::State) {
-        async { profile_sync!() }.spawn(task_set);
+        async { profile_sync!() }.spawn_at(task_set);
     }
 
     fn handle_key_event(
@@ -124,7 +124,7 @@ impl DualTabContent for Profile {
 
                     profile_sync!()
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Edit => {
                 let name = get_name!(self, state);
@@ -134,7 +134,7 @@ impl DualTabContent for Profile {
 
                     do_nothing()
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Select => {
                 let name = get_name!(self, state);
@@ -142,7 +142,7 @@ impl DualTabContent for Profile {
                     tri!(select(db::get(name).unwrap()));
                     do_nothing()
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Delete => {
                 let name = get_name!(self, state);
@@ -152,7 +152,7 @@ impl DualTabContent for Profile {
 
                     profile_sync!()
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Preview => {
                 let name = get_name!(self, state);
@@ -179,7 +179,7 @@ impl DualTabContent for Profile {
 
                     do_nothing()
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Update => {
                 let name = get_name!(self, state);
@@ -193,7 +193,7 @@ impl DualTabContent for Profile {
 
                     profile_sync!()
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Search => {
                 async {
@@ -209,7 +209,7 @@ impl DualTabContent for Profile {
                         content.filter = Some(filter);
                     })
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Test => {
                 let name = get_name!(self, state);
@@ -223,7 +223,7 @@ impl DualTabContent for Profile {
 
                     do_nothing()
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
 
             Key::MoveUp => state.select_previous(),
@@ -275,7 +275,7 @@ pub(super) fn get_profiles_with_readable_atime() -> (Vec<String>, Vec<String>) {
                 pf.load_local_profile()
                     .ok()
                     .and_then(|lp| lp.atime())
-                    .map(|t| display_duration(t))
+                    .map(display_duration)
                     .unwrap_or_else(|| "Unknown".to_owned()),
             )
         })

@@ -9,8 +9,7 @@ fn main() {
     };
 
     if let Err(e) = config::init(cmd.config_dir) {
-        eprintln!("Failed to load Config");
-        eprintln!("{}", e);
+        eprintln!("Failed to load Config\n{e}");
         return;
     }
 

@@ -61,6 +61,7 @@ impl TuiWidget for PopUp {
         }
     }
 
+    /// `area` is not needed but kept for tarit
     fn render(&mut self, f: &mut Frame, _: Rect) {
         self.content.iter_mut().for_each(|c| c.render(f));
     }

@@ -22,11 +22,15 @@ pub mod database;
 #[cfg(feature = "migration_v0_2_3")]
 pub mod v0_2_3;
 
+/// Load using [init]
 pub const CONFIG: Wrapper = Wrapper;
 
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 static _CONFIG: OnceLock<Config> = OnceLock::new();
 
+/// Wrapper around [Config], only propose is be deref-ed as [Config] 
+/// 
+/// Do Not use it directly
 pub struct Wrapper;
 
 impl std::ops::Deref for Wrapper {
@@ -37,6 +41,7 @@ impl std::ops::Deref for Wrapper {
     }
 }
 
+/// Do Not use it directly, use [CONFIG] instead
 pub struct Config {
     pub cfg_file: ConfigFile,
     pub data: Mutex<ProfileManager>,

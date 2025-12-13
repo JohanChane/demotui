@@ -61,7 +61,7 @@ impl DualTabContentMate for Template {
             let templates = tri!(get_all_templates());
             wrapper(|(_, content): &mut (Self::Mate, Self)| content.templates = templates)
         }
-        .spawn(task_set);
+        .spawn_at(task_set);
     }
 
     fn handle_key_event(
@@ -76,11 +76,11 @@ impl DualTabContentMate for Template {
             Key::Generate => {
                 let name = get_name!(self, state);
                 async {
-                    tri!(template::apply_template(name));
+                    tri!(apply_template(name));
 
                     profile_sync!(%)
                 }
-                .spawn(task_set);
+                .spawn_at(task_set);
             }
             Key::Delete => todo!(),
             Key::Preview => todo!(),

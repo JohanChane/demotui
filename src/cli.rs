@@ -36,6 +36,7 @@ pub struct Cmds {
     load_theme_realtime: bool,
 }
 
+/// Parse args, also handle envs(like `CLASHTUI_CONFIG_DIR`)
 pub fn from_env() -> Cmds {
     use clap::Parser;
     let instance = Cmds::parse();

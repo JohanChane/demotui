@@ -4,6 +4,7 @@ use crossterm::event::KeyCode;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::widgets::{Clear, Paragraph};
 
+/// To erease the type `C` in `Instance<C>`
 pub type Wrapped = Box<dyn Wrapper + Send>;
 
 pub trait Wrapper {
@@ -15,7 +16,8 @@ pub trait Wrapper {
 impl<C: Msg> Wrapper for Instance<C> {
     fn handle_key_event(&mut self, kv: &KeyEvent) -> Route {
         if matches!(kv.code, KeyCode::Tab) {
-            self.is_focus_prompt = (!self.is_focus_prompt) && self.prompt.is_some()
+            self.is_focus_prompt = (!self.is_focus_prompt) && self.prompt.is_some();
+            return Route::Keep;
         }
         if let Some(prompt) = self.prompt.as_mut()
             && self.is_focus_prompt
@@ -34,7 +36,9 @@ impl<C: Msg> Wrapper for Instance<C> {
         if let Some(prompt) = self.prompt.as_mut() {
             use ratatui::symbols::{border, line::NORMAL};
             use ratatui::widgets::Borders;
-
+            // ┌─┐
+            // │  │
+            // ├─┤
             let base_block = base_block.border_set(border::Set {
                 bottom_left: NORMAL.vertical_right,
                 bottom_right: NORMAL.vertical_left,
@@ -46,9 +50,12 @@ impl<C: Msg> Wrapper for Instance<C> {
 
             let areas = {
                 let (content_width, content_height) = self.content.size();
-                let (_, prompt_height) = prompt.size();
-                let area =
-                    calc_area_from(content_width, content_height + prompt_height + 1, f.area());
+                let (prompt_width, prompt_height) = prompt.size();
+                let area = calc_area_from(
+                    content_width.max(prompt_width),
+                    content_height + prompt_height + 1,
+                    f.area(),
+                );
                 f.render_widget(Clear, area);
 
                 Layout::vertical([Constraint::Fill(1), Constraint::Length(1 + content_height)])
