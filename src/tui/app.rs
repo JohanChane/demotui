@@ -14,7 +14,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             file_tab: FileTab::default(),
             popup: PopUp::default(),
@@ -23,15 +23,16 @@ impl App {
         }
     }
     #[tokio::main]
-    pub async fn serve(mut self) -> anyhow::Result<()> {
+    pub async fn serve() -> anyhow::Result<()> {
+        let mut app = Self::new();
         let mut events = crossterm::event::EventStream::new();
         let mut invt = tokio::time::interval(TICK_RATE);
         let mut terminal =
             ratatui::Terminal::new(ratatui::backend::CrosstermBackend::new(std::io::stdout()))?;
 
-        while !self.should_quit {
-            terminal.draw(|f| self.render(f))?;
-            self.sync();
+        while !app.should_quit {
+            terminal.draw(|f| app.render(f))?;
+            app.sync();
 
             let ev = {
                 use futures_lite::StreamExt as _;
@@ -49,7 +50,7 @@ impl App {
                 Event::Key(key_event) => {
                     #[cfg(debug_assertions)]
                     the_egg(key_event.code);
-                    self.handle_key_event(&key_event);
+                    app.handle_key_event(&key_event);
                 }
                 Event::Resize(..) => terminal.autoresize()?,
                 _ => (),
@@ -86,10 +87,7 @@ impl App {
         render_tabbar(FileTab::TITLES.into_iter(), self.tab_index, f, chunks[0]);
 
         match self.tab_index {
-            n @ 0..=1 => {
-                self.file_tab.is_focus_profile = n == 0;
-                self.file_tab.render(f, chunks[1])
-            }
+            0..=1 => self.file_tab.render(f, chunks[1]),
             2.. => unreachable!(),
         }
 
@@ -112,6 +110,11 @@ impl App {
                         self.tab_index = 0
                     } else {
                         self.tab_index += 1
+                    }
+                    match self.tab_index {
+                        0 => self.file_tab.focused_on_profile(),
+                        1 => self.file_tab.focused_on_template(),
+                        _ => {}
                     }
                 }
                 KeyCode::Char('q') => self.should_quit = true,

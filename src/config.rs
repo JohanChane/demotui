@@ -76,6 +76,11 @@ pub fn init(base_path: Option<PathBuf>) -> Result<()> {
         };
         ensure!(path.exists(), "{} does NOT exists", path.display());
         ensure!(path.is_dir(), "{} is not a dir", path.display());
+        ensure!(
+            path.read_dir().is_ok_and(|dir| dir.count() != 0),
+            "{} is an empty dir",
+            path.display()
+        );
 
         let path = path
             .canonicalize()

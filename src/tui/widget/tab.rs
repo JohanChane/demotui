@@ -2,11 +2,16 @@ use crate::tui::TuiWidget;
 use crossterm::event::KeyEvent;
 use ratatui::prelude::{Frame, Rect};
 
-pub trait TabContent: 'static {
+pub trait BasicTabContent: 'static {
     type Key: for<'a> TryFrom<&'a KeyEvent, Error = ()>;
     type State;
 
     const TITLE: &str;
+}
+
+pub trait TabContent: BasicTabContent {
+    /// This function will be called when creating an instance(`Tab<C>::default()`)
+    fn init(&mut self, task_set: &mut FutureSet<Self>, state: &mut Self::State);
 
     fn handle_key_event(
         &mut self,
@@ -43,15 +48,6 @@ pub struct Tab<C: TabContent> {
     tasks: FutureSet<C>,
 }
 
-impl<C> Tab<C>
-where
-    C: TabContent,
-{
-    pub fn content_mut(&mut self) -> &mut C {
-        &mut self.content
-    }
-}
-
 impl<C> TuiWidget for Tab<C>
 where
     C: TabContent,
@@ -69,7 +65,7 @@ where
 
     fn sync(&mut self) {
         while let Some(f) = self.tasks.try_join_next() {
-            f.unwrap()(self.content_mut())
+            f.unwrap()(&mut self.content)
         }
     }
 }
@@ -80,10 +76,14 @@ where
     C::State: Default,
 {
     fn default() -> Self {
+        let mut content: C = Default::default();
+        let mut state = Default::default();
+        let mut tasks = Default::default();
+        content.init(&mut tasks, &mut state);
         Self {
-            content: Default::default(),
-            state: Default::default(),
-            tasks: Default::default(),
+            content,
+            state,
+            tasks,
         }
     }
 }

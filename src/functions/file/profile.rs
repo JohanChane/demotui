@@ -113,7 +113,6 @@ pub async fn update_profile(
             });
             Ok(res)
         }
-        // #[cfg(feature = "template")]
         ProfileType::Generated(template_name) => {
             // rebuild from template
             use super::template::apply_template;
@@ -130,10 +129,6 @@ pub async fn update_profile(
             serde_yml::to_writer(std::fs::File::create(path)?, &content)?;
             Ok(format!("Regenerated: {}(From {template_name})", name))
         }
-        // #[cfg(not(feature = "template"))]
-        // ProfileType::Generated(..) => {
-        //     anyhow::bail!("template feature not enabled in this build!")
-        // }
         ProfileType::Github { url, token } => {
             let res = update_with(url, name, path, with_proxy, |url, with_proxy| {
                 crate::functions::restful::download::github(url, with_proxy, token)
@@ -176,12 +171,3 @@ pub fn extract_domain(url: &str) -> Option<&str> {
     }
     None
 }
-
-/*
-pub fn timestamp_to_readable(timestamp: u64) -> String {
-    let duration = std::time::Duration::from_secs(timestamp);
-    let datetime = std::time::UNIX_EPOCH + duration;
-    let datetime: chrono::DateTime<chrono::Utc> = datetime.into();
-    datetime.format("%Y-%m-%d %H:%M:%S").to_string()
-}
-*/

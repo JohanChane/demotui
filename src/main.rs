@@ -16,7 +16,7 @@ fn main() {
 
     tui::init().unwrap();
 
-    tui::App::new().serve().unwrap();
+    tui::App::serve().unwrap();
 
     tui::restore().unwrap();
 

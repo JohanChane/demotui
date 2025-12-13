@@ -21,8 +21,6 @@ pub fn request(
     req.with_timeout(timeout!()).send().map_err(|e| e.into())
 }
 
-
-
 #[cfg(feature = "deprecated")]
 #[deprecated = "EC has been deprecated. User should run `echo -n \"user:password\" | base64` to get basic auth token"]
 /// Convert Embedded Credential into Authorization Token

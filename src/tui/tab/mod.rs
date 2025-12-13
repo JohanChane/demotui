@@ -1,7 +1,6 @@
 mod dev {
-    pub use crate::tui::widget::tab::{
-        FutureSet, FutureSetExt, Tab, TabContent, do_nothing, wrapper,
-    };
+    pub use crate::tui::widget::dualtab::*;
+    pub use crate::tui::widget::tab::*;
     pub use crossterm::event::{KeyCode, KeyEvent};
     pub use ratatui::prelude::{Frame, Rect};
     pub use ratatui::widgets::{Block, List, ListState, StatefulWidget};

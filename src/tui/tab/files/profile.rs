@@ -53,46 +53,53 @@ macro_rules! get_name {
     };
 }
 
-macro_rules! sync {
-    ($content:expr) => {{
-        let mut composed: Vec<(String, Option<std::time::Duration>)> =
-            crate::functions::file::profile::db::get_all()
-                .into_iter()
-                .map(|pf| {
-                    (
-                        pf.name.clone(),
-                        pf.load_local_profile().ok().and_then(|lp| lp.atime()),
-                    )
-                })
-                .collect();
-        composed.sort_unstable();
-        let (name, atime) = composed.into_iter().unzip();
-        $content.atime = atime;
-        $content.profiles = name;
+// The Only reason why I use two functions to `sync` is that
+// I except modifying Self (what we do in `wrapper`) is
+// fast and infallable
+//
+// Tasks should be done in async{} and left only values that
+// apply to Self
+macro_rules! profile_sync {
+    () => {{
+        let (name, atime) = super::profile::get_profiles_with_readable_atime();
+        wrapper(|(content, _): &mut (Self, Self::Mate)| {
+            super::profile::sync_helper(content, name, atime)
+        })
     }};
-    () => {
-        wrapper(|content: &mut Self| sync!(content))
-    };
+    (%) => {{
+        let (name, atime) = super::profile::get_profiles_with_readable_atime();
+        wrapper(|(content, _): &mut (Self::Mate, Self)| {
+            super::profile::sync_helper(content, name, atime)
+        })
+    }};
 }
 
 #[derive(Default)]
 pub struct Profile {
     profiles: Vec<String>,
-    atime: Vec<Option<Duration>>,
+    // atime: Vec<Option<Duration>>,
+    atime: Vec<String>,
     filter: Option<String>,
-    pub is_focused: bool,
 }
 
-impl TabContent for Profile {
+impl BasicTabContent for Profile {
     type Key = Key;
     type State = ListState;
 
     const TITLE: &str = "profile";
+}
+
+impl DualTabContent for Profile {
+    type Mate = super::template::Template;
+
+    fn init(&mut self, task_set: &mut FutureSet<(Self, Self::Mate)>, _: &mut Self::State) {
+        async { profile_sync!() }.spawn(task_set);
+    }
 
     fn handle_key_event(
         &mut self,
         key: Self::Key,
-        task_set: &mut FutureSet<Self>,
+        task_set: &mut FutureSet<(Self, Self::Mate)>,
         state: &mut Self::State,
     ) {
         match key {
@@ -115,7 +122,7 @@ impl TabContent for Profile {
                     let pf = tri!(db::create(name, url));
                     tri!(update_profile(pf, false, false).await);
 
-                    sync!()
+                    profile_sync!()
                 }
                 .spawn(task_set);
             }
@@ -143,7 +150,7 @@ impl TabContent for Profile {
                     let pf = db::get(name).unwrap();
                     tri!(db::remove(pf));
 
-                    sync!()
+                    profile_sync!()
                 }
                 .spawn(task_set);
             }
@@ -166,6 +173,10 @@ impl TabContent for Profile {
                         lines.extend(content.lines().map(|s| s.to_owned()));
                     }
 
+                    Confirm::title("Preview".to_owned())
+                        .with_prompt(lines.join("\n"))
+                        .build_and_send();
+
                     do_nothing()
                 }
                 .spawn(task_set);
@@ -173,14 +184,14 @@ impl TabContent for Profile {
             Key::Update => {
                 let name = get_name!(self, state);
                 async {
-                    let with_proxy = todo!();
-                    let remove_proxy_provider = todo!();
+                    let with_proxy = todo!("crate::tui::popmsg::SelectSingle");
+                    let remove_proxy_provider = todo!("crate::tui::popmsg::SelectSingle");
                     let result = tri!(
                         update_profile(db::get(name).unwrap(), with_proxy, remove_proxy_provider,)
                             .await
                     );
 
-                    sync!()
+                    profile_sync!()
                 }
                 .spawn(task_set);
             }
@@ -194,7 +205,7 @@ impl TabContent for Profile {
                         or_cancel
                     );
 
-                    wrapper(|content: &mut Self| {
+                    wrapper(|(content, _): &mut (Self, Self::Mate)| {
                         content.filter = Some(filter);
                     })
                 }
@@ -203,7 +214,7 @@ impl TabContent for Profile {
             Key::Test => {
                 let name = get_name!(self, state);
                 async {
-                    let enable_geodata_mode = todo!();
+                    let enable_geodata_mode = todo!("crate::tui::popmsg::SelectSingle");
                     let pf = tri!(db::get(name).unwrap().load_local_profile());
                     let result = test_config(Some(&pf.path), enable_geodata_mode);
                     Confirm::title("Test Result".to_owned())
@@ -220,7 +231,7 @@ impl TabContent for Profile {
         }
     }
 
-    fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State) {
+    fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State, is_focused: bool) {
         let list = List::from_iter(
             self.profiles
                 .iter()
@@ -231,26 +242,66 @@ impl TabContent for Profile {
                     ListItem::new(Line::from(vec![
                         Span::raw(value),
                         Span::raw("("),
-                        Span::raw("").style(Theme::get().profile_tab.update_interval),
+                        Span::raw(extra).style(Theme::get().profile_tab.update_interval),
                         Span::raw(")"),
                     ]))
                 }),
         )
         .block(
             Block::bordered()
-                .border_style(if self.is_focused {
+                .border_style(if is_focused {
                     Theme::get().list.block_selected
                 } else {
                     Theme::get().list.block_unselected
                 })
                 .title(Self::TITLE),
         )
-        .highlight_style(if self.is_focused {
+        .highlight_style(if is_focused {
             Theme::get().list.highlight
         } else {
             Theme::get().list.unhighlight
         });
 
         f.render_stateful_widget(list, area, state);
+    }
+}
+
+pub(super) fn get_profiles_with_readable_atime() -> (Vec<String>, Vec<String>) {
+    let mut composed: Vec<(String, String)> = crate::functions::file::profile::db::get_all()
+        .into_iter()
+        .map(|pf| {
+            (
+                pf.name.clone(),
+                pf.load_local_profile()
+                    .ok()
+                    .and_then(|lp| lp.atime())
+                    .map(|t| display_duration(t))
+                    .unwrap_or_else(|| "Unknown".to_owned()),
+            )
+        })
+        .collect();
+    composed.sort_unstable();
+    let (name, atime) = composed.into_iter().unzip();
+    (name, atime)
+}
+
+pub(super) fn sync_helper(content: &mut Profile, name: Vec<String>, atime: Vec<String>) {
+    content.atime = atime;
+    content.profiles = name;
+}
+
+fn display_duration(t: std::time::Duration) -> String {
+    use std::time::Duration;
+    if t.is_zero() {
+        "Just Now".to_string()
+    } else if t < Duration::from_secs(60 * 59) {
+        let min = t.as_secs() / 60;
+        format!("In {} mins", min + 1)
+    } else if t < Duration::from_secs(3600 * 24) {
+        let hou = t.as_secs() / 3600;
+        format!("In {hou} hours")
+    } else {
+        let day = t.as_secs() / (3600 * 24);
+        format!("In about {day} days")
     }
 }
