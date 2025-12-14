@@ -1,9 +1,11 @@
 use super::*;
 use tab::prelude::*;
+use tokio::sync::Notify;
 use widget::popmsg::PopUp;
 
 // 50fps
 const TICK_RATE: std::time::Duration = std::time::Duration::from_millis(20);
+pub(super) static FULL_RENDER: Notify = Notify::const_new();
 
 pub struct App {
     file_tab: FileTab,
@@ -41,6 +43,8 @@ impl App {
                 let ev = tokio::select! {
                     Some(ev) = events.next() => ev?,
                     _ = &mut tick => continue,
+                    // if we switch between screens, we have to tell ratatui to re-render everything
+                    _ = FULL_RENDER.notified() => { terminal.clear()?; continue },
                 };
                 tick.await;
                 ev
@@ -67,7 +71,7 @@ impl App {
     /// Keyevent
     ///     │  if popup
     ///     ├──────► PopUp
-    ///     │
+    ///     │  else
     ///     └─► App ─► Tab
     /// ```
     fn handle_key_event(&mut self, kv: &KeyEvent) {

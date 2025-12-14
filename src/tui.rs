@@ -28,3 +28,15 @@ pub fn restore() -> anyhow::Result<()> {
     raw_mode::restore()?;
     Ok(())
 }
+
+/// Leave RawMode and get back to main screen
+pub fn hold(on: bool) -> anyhow::Result<()> {
+    if on {
+        raw_mode::restore()?;
+        // tell ratatui to re-render
+        app::FULL_RENDER.notify_one();
+    } else {
+        raw_mode::setup()?
+    }
+    Ok(())
+}

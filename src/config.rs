@@ -28,8 +28,8 @@ pub const CONFIG: Wrapper = Wrapper;
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 static _CONFIG: OnceLock<Config> = OnceLock::new();
 
-/// Wrapper around [Config], only propose is be deref-ed as [Config] 
-/// 
+/// Wrapper around [Config], only propose is be deref-ed as [Config]
+///
 /// Do Not use it directly
 pub struct Wrapper;
 
