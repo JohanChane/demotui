@@ -8,8 +8,9 @@ const TICK_RATE: std::time::Duration = std::time::Duration::from_millis(20);
 pub(super) static FULL_RENDER: Notify = Notify::const_new();
 
 pub struct App {
-    status_tab: StatusTab,
-    file_tab: FileTab,
+    tabs: Vec<Tab>,
+    // status_tab: StatusTab,
+    // file_tab: FileTab,
     popup: PopUp,
 
     tab_index: u8,
@@ -19,8 +20,9 @@ pub struct App {
 impl App {
     fn new() -> Self {
         Self {
-            status_tab: StatusTab::default(),
-            file_tab: FileTab::default(),
+            tabs: vec![StatusTab::default().into(), FileTab::default().into()],
+            // status_tab: StatusTab::default(),
+            // file_tab: FileTab::default(),
             popup: PopUp::default(),
             tab_index: 0,
             should_quit: false,
@@ -80,11 +82,7 @@ impl App {
         if self.popup.check() {
             self.popup.handle_key_event(kv);
         } else if !self.handle_global_kv(kv) {
-            match self.tab_index {
-                0 => self.status_tab.handle_key_event(kv),
-                1 => self.file_tab.handle_key_event(kv),
-                2.. => unreachable!(),
-            }
+            self.tabs[self.tab_index as usize].handle_key_event(kv);
         }
     }
     fn render(&mut self, f: &mut ratatui::Frame) {
@@ -100,17 +98,13 @@ impl App {
             .split(f.area());
 
         render_tabbar(
-            [StatusTab::TITLE, FileTab::TITLE],
+            self.tabs.iter().map(|tab| tab.title()),
             self.tab_index,
             f,
             chunks[0],
         );
 
-        match self.tab_index {
-            0 => self.status_tab.render(f, chunks[1]),
-            1 => self.file_tab.render(f, chunks[1]),
-            2.. => unreachable!(),
-        }
+        self.tabs[self.tab_index as usize].render(f, chunks[1]);
 
         if self.popup.check() {
             self.popup.render(f, Default::default());
@@ -140,8 +134,7 @@ impl App {
     }
     fn sync(&mut self) {
         self.popup.sync();
-        self.file_tab.sync();
-        self.status_tab.sync();
+        self.tabs.iter_mut().for_each(|tab| tab.sync());
     }
 }
 

@@ -110,7 +110,6 @@ pub fn do_nothing<C>() -> CallBack<C> {
     wrapper(|_| ())
 }
 
-
 pub trait FutureSetExt<C>: Future<Output = CallBack<C>>
 where
     Self: Sized + Send + 'static,

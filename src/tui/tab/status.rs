@@ -2,14 +2,7 @@ use ratatui::{text::Text, widgets::Paragraph};
 
 use super::dev::*;
 
-#[derive(Default)]
-pub struct StatusTab(Tab<Status>);
-
-impl StatusTab {
-    pub const TITLE: &str = Status::TITLE;
-}
-
-crate::new_type_impl_tuiwidget!(StatusTab);
+newtype_tab!(StatusTab(Tab<Status>));
 
 enum Key {}
 
@@ -60,18 +53,6 @@ impl BasicTabContent for Status {
     const TITLE: &str = "Status";
 
     fn after_sync(&self, task_set: &mut FutureSet<Self>) {
-        let task =
-        async {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-            let version = tri!(restful::control::version(), or_set);
-            let config = tri!(restful::config::fetch(), or_set);
-
-            wrapper(|content: &mut Self| {
-                content.version = Some(version);
-                content.config = Some(config);
-            })
-        };
         async {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
