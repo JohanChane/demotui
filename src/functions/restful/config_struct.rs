@@ -22,7 +22,7 @@ pub struct ClashConfig {
     pub find_process_mode: Option<String>,
 }
 impl ClashConfig {
-    pub fn build(self) -> Vec<String> {
+    pub fn build(&self) -> Vec<String> {
         macro_rules! build {
             ($($value:ident),+ $(,)? $(#Option $(,)? $($option_value:ident),+)? $(,)?) => {
                 vec![$(

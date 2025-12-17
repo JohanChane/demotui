@@ -18,26 +18,13 @@ pub trait BasicTabContent: 'static {
     type State;
 
     const TITLE: &str;
+
+    /// Allow you to do something after one task is done
+    fn after_sync(&self, _task_set: &mut FutureSet<Self>) {}
 }
 
 type CallBack<C> = Box<dyn FnOnce(&mut C) + Send>;
 pub type FutureSet<C> = tokio::task::JoinSet<CallBack<C>>;
-
-pub trait FutureSetExt<C>: Future<Output = CallBack<C>>
-where
-    Self: Sized + Send + 'static,
-    C: 'static,
-{
-    fn spawn_at(self, set: &mut FutureSet<C>) {
-        set.spawn(self);
-    }
-}
-impl<F, C> FutureSetExt<C> for F
-where
-    F: Future<Output = CallBack<C>> + Send + 'static,
-    C: 'static,
-{
-}
 
 pub trait TabContent: BasicTabContent {
     /// This function will be called when creating an instance(`Tab<C>::default()`)
@@ -77,7 +64,8 @@ where
     fn sync(&mut self) {
         while let Some(f) = self.tasks.try_join_next() {
             // SAFETY: panic happens only when a task is canceled(not gonna to happen) or paniced
-            f.unwrap()(&mut self.content)
+            f.unwrap()(&mut self.content);
+            self.content.after_sync(&mut self.tasks);
         }
     }
 }
@@ -120,4 +108,21 @@ pub fn wrapper<C>(f: impl FnOnce(&mut C) + 'static + Send) -> CallBack<C> {
 
 pub fn do_nothing<C>() -> CallBack<C> {
     wrapper(|_| ())
+}
+
+
+pub trait FutureSetExt<C>: Future<Output = CallBack<C>>
+where
+    Self: Sized + Send + 'static,
+    C: 'static,
+{
+    fn spawn_at(self, set: &mut FutureSet<C>) {
+        set.spawn(self);
+    }
+}
+impl<F, C> FutureSetExt<C> for F
+where
+    F: Future<Output = CallBack<C>> + Send + 'static,
+    C: 'static,
+{
 }

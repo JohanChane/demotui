@@ -25,7 +25,7 @@ fn run_as_su_by_sudo(pgm: &str, args: &[&str]) -> Result<String> {
     crate::tui::hold(true)?;
 
     let opt = std::process::Command::new("sudo")
-        .arg("-S")
+        // .arg("-S")
         .arg(pgm)
         .args(args)
         .output()?;

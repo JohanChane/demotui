@@ -3,6 +3,7 @@ mod dev {
     pub use crate::tui::widget::tab::*;
     pub use crossterm::event::{KeyCode, KeyEvent};
     pub use ratatui::prelude::{Frame, Rect};
+    pub use ratatui::style::Stylize as _;
     pub use ratatui::widgets::{Block, List, ListState, StatefulWidget};
 
     pub use crate::tui::popmsg::prelude::*;
@@ -30,7 +31,9 @@ macro_rules! tri {
 }
 
 mod files;
+mod status;
 
 pub mod prelude {
     pub use super::files::FileTab;
+    pub use super::status::StatusTab;
 }

@@ -8,6 +8,7 @@ const TICK_RATE: std::time::Duration = std::time::Duration::from_millis(20);
 pub(super) static FULL_RENDER: Notify = Notify::const_new();
 
 pub struct App {
+    status_tab: StatusTab,
     file_tab: FileTab,
     popup: PopUp,
 
@@ -18,6 +19,7 @@ pub struct App {
 impl App {
     fn new() -> Self {
         Self {
+            status_tab: StatusTab::default(),
             file_tab: FileTab::default(),
             popup: PopUp::default(),
             tab_index: 0,
@@ -79,28 +81,34 @@ impl App {
             self.popup.handle_key_event(kv);
         } else if !self.handle_global_kv(kv) {
             match self.tab_index {
-                0..=1 => self.file_tab.handle_key_event(kv),
+                0 => self.status_tab.handle_key_event(kv),
+                1 => self.file_tab.handle_key_event(kv),
                 2.. => unreachable!(),
             }
         }
     }
     fn render(&mut self, f: &mut ratatui::Frame) {
         use ratatui::prelude::{Constraint, Layout};
-        // Todo:  将原本的statusbar移过来
 
-        // split terminal into three part
+        // split terminal into parts
         let chunks = Layout::default()
             .constraints([
                 Constraint::Length(3),
                 Constraint::Fill(1),
-                Constraint::Length(3),
+                // Constraint::Length(3),
             ])
             .split(f.area());
 
-        render_tabbar(FileTab::TITLES.into_iter(), self.tab_index, f, chunks[0]);
+        render_tabbar(
+            [StatusTab::TITLE, FileTab::TITLE],
+            self.tab_index,
+            f,
+            chunks[0],
+        );
 
         match self.tab_index {
-            0..=1 => self.file_tab.render(f, chunks[1]),
+            0 => self.status_tab.render(f, chunks[1]),
+            1 => self.file_tab.render(f, chunks[1]),
             2.. => unreachable!(),
         }
 
@@ -126,12 +134,6 @@ impl App {
                 KeyCode::Char('q') => self.should_quit = true,
                 _ => return false,
             }
-            // Silly helper for dualtab
-            match self.tab_index {
-                0 => self.file_tab.focused_on_profile(),
-                1 => self.file_tab.focused_on_template(),
-                _ => {}
-            }
             return true;
         }
         false
@@ -139,23 +141,32 @@ impl App {
     fn sync(&mut self) {
         self.popup.sync();
         self.file_tab.sync();
+        self.status_tab.sync();
     }
 }
 
 /// each item should represent for one tab
 fn render_tabbar(
-    titles: impl Iterator<Item = &'static str>,
+    titles: impl IntoIterator<Item = &'static str>,
     selected: u8,
     f: &mut ratatui::Frame,
     area: ratatui::layout::Rect,
 ) {
     use crate::tui::theme::Theme;
-    use ratatui::style::Styled;
+    use ratatui::style::{Styled, Stylize};
+    use ratatui::text::Line;
     use ratatui::widgets::{Block, Tabs};
 
-    let titles = titles.map(|s| s.set_style(Theme::get().bars.tabbar_text));
+    let block = Block::bordered()
+        .style(Theme::get().bars.block)
+        .title(" Clashtui ")
+        .title_bottom(Line::raw(" Tab or num ").right_aligned().reversed());
+    let titles = titles
+        .into_iter()
+        .enumerate()
+        .map(|(idx, s)| format!("{} {s}", idx + 1).set_style(Theme::get().bars.tabbar_text));
     let widget = Tabs::new(titles)
-        .block(Block::bordered())
+        .block(block)
         .highlight_style(Theme::get().bars.tabbar_highlight)
         .select(Some(selected as usize));
     f.render_widget(widget, area);

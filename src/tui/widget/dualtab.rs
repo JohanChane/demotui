@@ -12,12 +12,13 @@ where
     /// This function will be called when creating an instance(`DualTab<C1,C2>::default()`)
     fn init(&mut self, task_set: &mut FutureSet<(Self, Self::Mate)>, state: &mut Self::State);
 
+    /// If true, switch to Mate
     fn handle_key_event(
         &mut self,
         key: Self::Key,
         task_set: &mut FutureSet<(Self, Self::Mate)>,
         state: &mut Self::State,
-    );
+    ) -> bool;
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State, is_focused: bool);
 }
@@ -31,12 +32,13 @@ where
     /// This function will be called when creating an instance(`DualTab<C1,C2>::default()`)
     fn init(&mut self, task_set: &mut FutureSet<(Self::Mate, Self)>, state: &mut Self::State);
 
+    /// If true, switch to Mate
     fn handle_key_event(
         &mut self,
         key: Self::Key,
         task_set: &mut FutureSet<(Self::Mate, Self)>,
         state: &mut Self::State,
-    );
+    ) -> bool;
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State, is_focused: bool);
 }
@@ -50,19 +52,6 @@ where
     state: (C1::State, C2::State),
     tasks: FutureSet<(C1, C2)>,
     is_focus_on_c1: bool,
-}
-
-impl<C1, C2> DualTab<C1, C2>
-where
-    C1: DualTabContent<Mate = C2>,
-    C2: DualTabContentMate<Mate = C1>,
-{
-    pub fn focused_on_c1(&mut self) {
-        self.is_focus_on_c1 = true
-    }
-    pub fn focused_on_c2(&mut self) {
-        self.is_focus_on_c1 = false
-    }
 }
 
 impl<C1, C2> Default for DualTab<C1, C2>
@@ -95,21 +84,25 @@ where
     fn handle_key_event(&mut self, kv: &KeyEvent) {
         if self.is_focus_on_c1 {
             if let Ok(key) = C1::Key::try_from(kv) {
-                DualTabContent::handle_key_event(
+                if DualTabContent::handle_key_event(
                     &mut self.content.0,
                     key,
                     &mut self.tasks,
                     &mut self.state.0,
-                );
+                ) {
+                    self.is_focus_on_c1 = false
+                }
             }
         } else {
             if let Ok(key) = C2::Key::try_from(kv) {
-                DualTabContentMate::handle_key_event(
+                if DualTabContentMate::handle_key_event(
                     &mut self.content.1,
                     key,
                     &mut self.tasks,
                     &mut self.state.1,
-                );
+                ) {
+                    self.is_focus_on_c1 = true
+                }
             }
         }
     }

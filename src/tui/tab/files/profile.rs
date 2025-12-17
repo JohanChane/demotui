@@ -14,6 +14,7 @@ pub enum Key {
     Search,
     Test,
 
+    Switch,
     MoveUp,
     MoveDown,
 }
@@ -35,6 +36,7 @@ impl TryFrom<&KeyEvent> for Key {
             KeyCode::Char('/') => Self::Search,
             KeyCode::Char('t') => Self::Test,
 
+            KeyCode::Right | KeyCode::Left => Self::Switch,
             KeyCode::Down => Self::MoveDown,
             KeyCode::Up => Self::MoveUp,
 
@@ -46,9 +48,9 @@ impl TryFrom<&KeyEvent> for Key {
 macro_rules! get_name {
     ($self:expr,$state:expr) => {
         if let Some(idx) = $state.selected() {
-            $self.profiles[idx].clone()
+            $self.items[idx].clone()
         } else {
-            return;
+            return false;
         }
     };
 }
@@ -76,7 +78,7 @@ macro_rules! profile_sync {
 
 #[derive(Default)]
 pub struct Profile {
-    profiles: Vec<String>,
+    items: Vec<String>,
     // atime: Vec<Option<Duration>>,
     atime: Vec<String>,
     filter: Option<String>,
@@ -86,7 +88,7 @@ impl BasicTabContent for Profile {
     type Key = Key;
     type State = ListState;
 
-    const TITLE: &str = "profile";
+    const TITLE: &str = "Profile";
 }
 
 impl DualTabContent for Profile {
@@ -101,7 +103,7 @@ impl DualTabContent for Profile {
         key: Self::Key,
         task_set: &mut FutureSet<(Self, Self::Mate)>,
         state: &mut Self::State,
-    ) {
+    ) -> bool {
         match key {
             Key::Add => {
                 async {
@@ -206,7 +208,7 @@ impl DualTabContent for Profile {
                     );
 
                     wrapper(|(content, _): &mut (Self, Self::Mate)| {
-                        content.filter = Some(filter);
+                        content.filter = (!filter.is_empty()).then_some(filter);
                     })
                 }
                 .spawn_at(task_set);
@@ -226,43 +228,50 @@ impl DualTabContent for Profile {
                 .spawn_at(task_set);
             }
 
+            Key::Switch => return true,
             Key::MoveUp => state.select_previous(),
             Key::MoveDown => state.select_next(),
         }
+        false
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State, is_focused: bool) {
-        let list = List::from_iter(
-            self.profiles
-                .iter()
-                .zip(self.atime.iter())
-                // filter content now
-                .filter(|(value, _)| self.filter.as_deref().is_none_or(|pat| value.contains(pat)))
-                .map(|(value, extra)| {
-                    ListItem::new(Line::from(vec![
-                        Span::raw(value),
-                        Span::raw("("),
-                        Span::raw(extra).style(Theme::get().profile_tab.update_interval),
-                        Span::raw(")"),
-                    ]))
-                }),
-        )
-        .block(
-            Block::bordered()
-                .border_style(if is_focused {
-                    Theme::get().list.block_selected
-                } else {
-                    Theme::get().list.block_unselected
-                })
-                .title(Self::TITLE),
-        )
-        .highlight_style(if is_focused {
-            Theme::get().list.highlight
-        } else {
-            Theme::get().list.unhighlight
-        });
+        let block = Block::bordered()
+            .border_style(if is_focused {
+                Theme::get().tab.tab_focused
+            } else {
+                Theme::get().tab.dualtab_unfocused
+            })
+            .title(Self::TITLE);
 
-        f.render_stateful_widget(list, area, state);
+        let block = if let Some(filter) = self.filter.as_ref() {
+            block.title_bottom(Line::raw(format!(" {filter} ")).right_aligned().reversed())
+        } else {
+            block.title_bottom(Line::raw(format!(" /: Search ")).right_aligned().reversed())
+        };
+
+        let iter = self
+            .items
+            .iter()
+            .zip(self.atime.iter())
+            // filter content now
+            .filter(|(value, _)| self.filter.as_deref().is_none_or(|pat| value.contains(pat)))
+            .map(|(value, extra)| {
+                ListItem::new(Line::from(vec![
+                    Span::raw(value),
+                    Span::raw("("),
+                    Span::raw(extra).style(Theme::get().profile_tab.update_interval),
+                    Span::raw(")"),
+                ]))
+            });
+        let widget = List::from_iter(iter)
+            .block(block)
+            .highlight_style(if is_focused {
+                Theme::get().tab.item_highlighted
+            } else {
+                Theme::get().tab.item_unhighlighted
+            });
+        f.render_stateful_widget(widget, area, state);
     }
 }
 
@@ -287,7 +296,7 @@ pub(super) fn get_profiles_with_readable_atime() -> (Vec<String>, Vec<String>) {
 
 pub(super) fn sync_helper(content: &mut Profile, name: Vec<String>, atime: Vec<String>) {
     content.atime = atime;
-    content.profiles = name;
+    content.items = name;
 }
 
 fn display_duration(t: std::time::Duration) -> String {
