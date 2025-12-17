@@ -134,6 +134,9 @@ pub fn load_basic() -> anyhow::Result<serde_yml::Mapping> {
     let fp = std::fs::File::create(DATA_DIR.get().unwrap().join(defs::BASIC_FILE))?;
     serde_yml::from_reader(fp).map_err(|e| e.into())
 }
+pub fn keymap_path() -> PathBuf {
+    DATA_DIR.get().unwrap().join(defs::KEYMAP_FILE)
+}
 
 load_save!(BasicInfo, defs::BASIC_FILE, no_save);
 load_save!(ConfigFile, defs::CONFIG_FILE);

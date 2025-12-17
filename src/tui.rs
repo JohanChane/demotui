@@ -1,6 +1,7 @@
 use crossterm::event::KeyEvent;
 use utils::*;
 
+mod agent;
 mod app;
 mod popmsg;
 mod tab;
@@ -18,6 +19,7 @@ trait TuiWidget {
 }
 
 pub fn init() -> anyhow::Result<()> {
+    agent::init()?;
     theme::Theme::load();
     raw_mode::setup()?;
     raw_mode::set_panic_hook();

@@ -9,6 +9,7 @@ pub mod defs {
     pub const THEME_FILE: &str = "theme.yaml";
     pub const PROFILE_DIR: &str = "profiles";
     pub const TEMPLATE_DIR: &str = "templates";
+    pub const KEYMAP_FILE: &str = "keymap.yaml";
 }
 
 pub(super) fn load_home_dir() -> Result<std::path::PathBuf> {

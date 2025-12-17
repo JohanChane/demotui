@@ -1,28 +1,50 @@
 use super::*;
 use crate::functions::file::template::*;
 
-pub enum Key {
+mod_agent!(
+    Key,
+    [
+        (KeyCode::Left, Key::Switch),
+        (KeyCode::Right, Key::Switch),
+        (KeyCode::Down, Key::MoveDown),
+        (KeyCode::Up, Key::MoveUp),
+        (KeyCode::Char('d'), Key::Action(Action::Delete)),
+        (KeyCode::Char('p'), Key::Action(Action::Preview)),
+        (KeyCode::Enter, Key::Action(Action::Generate)),
+    ]
+);
+
+#[derive(Clone, Copy, serde::Deserialize)]
+pub enum Action {
     Generate,
     Delete,
     Preview,
+}
 
+#[derive(Clone, Copy, serde::Deserialize)]
+pub enum Key {
     Switch,
     MoveUp,
     MoveDown,
+    Select,
+
+    Action(Action),
 }
 
 impl TryFrom<&KeyEvent> for Key {
     type Error = ();
 
     fn try_from(value: &KeyEvent) -> Result<Self, Self::Error> {
+        let agent = agent();
+        if !agent.is_empty() {
+            return agent.get(value).map(|act| *act).ok_or(());
+        }
+
         if value.kind != crossterm::event::KeyEventKind::Press {
             return Err(());
         }
         Ok(match value.code {
-            KeyCode::Enter => Self::Generate,
-            KeyCode::Char('d') => Self::Delete,
-            KeyCode::Char('p') => Self::Preview,
-
+            KeyCode::Enter => Self::Select,
             KeyCode::Right | KeyCode::Left => Self::Switch,
             KeyCode::Down => Self::MoveDown,
             KeyCode::Up => Self::MoveUp,
@@ -63,21 +85,16 @@ impl DualTabContentMate for Template {
         state: &mut Self::State,
     ) -> bool {
         match key {
-            Key::Generate => {
-                let name = get_name!(self, state);
-                async {
-                    tri!(apply_template(name));
-
-                    profile_sync!(%)
-                }
-                .spawn_at(task_set);
-            }
-            Key::Delete => todo!(),
-            Key::Preview => todo!(),
-
             Key::Switch => return true,
             Key::MoveDown => state.select_next(),
             Key::MoveUp => state.select_previous(),
+
+            Key::Select => todo!(),
+
+            Key::Action(action) => {
+                let name = get_name!(self, state);
+                action.act(name).spawn_at(task_set)
+            }
         }
         false
     }
@@ -115,5 +132,35 @@ impl DualTabContentMate for Template {
                 Theme::get().tab.item_unhighlighted
             });
         f.render_stateful_widget(widget, area, state);
+    }
+}
+
+mod actions {
+    use super::*;
+
+    impl Action {
+        pub async fn act(self, name: String) -> CB {
+            match self {
+                Self::Generate => generate(name).await,
+                Self::Delete => delete(name).await,
+                Self::Preview => preview(name).await,
+            }
+        }
+    }
+
+    type CB = Box<dyn for<'a> FnOnce(&'a mut C) + Send + 'static>;
+    type C = (<Template as DualTabContentMate>::Mate, Template);
+
+    async fn generate(name: String) -> CB {
+        tri!(apply_template(name));
+        sync!(C)
+    }
+
+    async fn delete(name: String) -> CB {
+        todo!()
+    }
+
+    async fn preview(name: String) -> CB {
+        todo!()
     }
 }
