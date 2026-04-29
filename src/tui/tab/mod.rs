@@ -3,7 +3,7 @@ mod dev {
     pub use crate::tui::widget::tab::*;
     pub use crossterm::event::{KeyCode, KeyEvent};
     pub use ratatui::prelude::{Frame, Rect};
-    pub use ratatui::style::Stylize as _;
+    pub use ratatui::style::{Color, Stylize as _};
     pub use ratatui::widgets::{Block, List, ListState, StatefulWidget};
 
     pub use crate::tui::popmsg::prelude::*;
@@ -109,6 +109,7 @@ pub trait TuiTab: super::TuiWidget {
 }
 
 mod files;
+mod proxies;
 mod status;
 
 macro_rules! enum_dispatch {
@@ -159,6 +160,7 @@ macro_rules! enum_dispatch {
 pub mod prelude {
     pub use super::TuiTab;
     pub use super::files::FileTab;
+    pub use super::proxies::ProxiesTab;
     pub use super::status::StatusTab;
 
     pub fn agent_init(keymap: &mut serde_yml::Mapping) -> anyhow::Result<()> {
@@ -174,6 +176,7 @@ pub mod prelude {
     enum_dispatch!(
         pub enum Tab {
             FileTab,
+            ProxiesTab,
             StatusTab,
         }
     );

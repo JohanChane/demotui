@@ -262,6 +262,7 @@ dependencies = [
  "crossterm",
  "env_logger",
  "futures-lite",
+ "indexmap",
  "log",
  "minreq",
  "ratatui",
@@ -397,6 +398,8 @@ checksum = "0ad4bb2b565bca0645f4d68c5c9af97fba094e9791da685bf83cb5f3ce74acf2"
 dependencies = [
  "equivalent",
  "hashbrown 0.16.1",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
