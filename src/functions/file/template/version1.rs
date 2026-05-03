@@ -204,6 +204,13 @@ pub(super) fn gen_template(
     tpl_name: &str,
     name_urls: Vec<(String, String)>,
 ) -> anyhow::Result<serde_yml::Mapping> {
+    // Ordering guarantee:
+    // - proxy-providers use serde_yml::Mapping (backed by indexmap::IndexMap),
+    //   which preserves insertion order. Template entries are expanded IN PLACE
+    //   (replaced by provider0, provider1, ... at their original position).
+    // - proxy-groups use serde_yml::Sequence (Vec), preserving push order.
+    //   Non-template groups stay where they are; template groups expand in place.
+    // - The clone of tpl into out_parsed_yaml preserves all top-level key order.
     use std::collections::HashMap;
     use std::path::Path;
 
@@ -244,9 +251,12 @@ pub(super) fn gen_template(
             let mut new_pp = pp.clone();
             new_pp.remove("tpl_param");
             // name: e.g. provider0, provider1, ...
-            let the_pp_name = format!("{}{}", pp_key.as_str().unwrap(), i);
+            let pp_key_str = pp_key
+                .as_str()
+                .with_context(|| "Proxy-provider key is not a string")?;
+            let the_pp_name = format!("{}{}", pp_key_str, i);
             pp_names
-                .entry(pp_key.as_str().unwrap().to_string())
+                .entry(pp_key_str.to_string())
                 .or_default()
                 .push(the_pp_name.clone());
 
@@ -353,6 +363,9 @@ pub(super) fn gen_template(
     // e.g. <provider> => provider0, provider1
     // e.g. <Auto> => Auto-provider0, Auto-provider1
     // e.g. <Select> => Select-provider0, Select-provider1
+    //
+    // Ordering: this iterates over the pg_sequence in the order it was constructed
+    // above, which preserves the original template ordering.
     let pg_sequence = if let Some(serde_yml::Value::Sequence(pg_sequence)) =
         out_parsed_yaml.get_mut(PROXY_GROUPS)
     {
@@ -363,9 +376,14 @@ pub(super) fn gen_template(
 
     for the_pg_seq in pg_sequence {
         if let Some(providers) = the_pg_seq.get("use") {
+            let prov_seq = providers
+                .as_sequence()
+                .with_context(|| "`use` field is not a sequence")?;
             let mut new_providers = Vec::new();
-            for p in providers.as_sequence().unwrap() {
-                let p_str = p.as_str().unwrap();
+            for p in prov_seq {
+                let p_str = p
+                    .as_str()
+                    .with_context(|| "Non-string value in `use` list")?;
                 if p_str.starts_with('<') && p_str.ends_with('>') {
                     let trimmed_p_str = p_str.trim_matches(|c| c == '<' || c == '>');
                     let provider_names = pp_names
@@ -387,7 +405,9 @@ pub(super) fn gen_template(
         if let Some(serde_yml::Value::Sequence(groups)) = the_pg_seq.get("proxies") {
             let mut new_groups = Vec::new();
             for g in groups {
-                let g_str = g.as_str().unwrap();
+                let g_str = g
+                    .as_str()
+                    .with_context(|| "Non-string value in `proxies` list")?;
                 if g_str.starts_with('<') && g_str.ends_with('>') {
                     let trimmed_g_str = g_str.trim_matches(|c| c == '<' || c == '>');
                     let group_names = pg_names
@@ -411,4 +431,241 @@ pub(super) fn gen_template(
     out_parsed_yaml["clashtui"] = serde_yml::Value::Null;
 
     Ok(out_parsed_yaml)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn testdata_path(name: &str) -> std::path::PathBuf {
+        let manifest_dir = std::env!("CARGO_MANIFEST_DIR");
+        std::path::PathBuf::from(manifest_dir)
+            .join("src/functions/file/template/testdata")
+            .join(name)
+    }
+
+    fn load_yaml<P: AsRef<std::path::Path>>(
+        path: P,
+    ) -> anyhow::Result<serde_yml::Mapping> {
+        let file = std::fs::File::open(path)?;
+        Ok(serde_yml::from_reader(file)?)
+    }
+
+    fn two_urls() -> Vec<(String, String)> {
+        vec![
+            ("sub1".to_string(), "https://example.com/sub1.yaml".to_string()),
+            ("sub2".to_string(), "https://example.com/sub2.yaml".to_string()),
+        ]
+    }
+
+    fn one_url() -> Vec<(String, String)> {
+        vec![
+            ("sub1".to_string(), "https://example.com/sub1.yaml".to_string()),
+        ]
+    }
+
+    #[test]
+    fn test_simple_expansion() {
+        let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
+        let expected = serde_yml::from_reader::<_, serde_yml::Value>(
+            std::fs::File::open(testdata_path("simple_tpl_output.yaml")).unwrap(),
+        )
+        .unwrap();
+
+        let result = gen_template(tpl, "simple_tpl.yaml", two_urls()).unwrap();
+        let result_value = serde_yml::to_value(result).unwrap();
+
+        assert_eq!(result_value, expected);
+    }
+
+    #[test]
+    fn test_multi_provider_expansion() {
+        let tpl = load_yaml(testdata_path("multi_provider_tpl.yaml")).unwrap();
+        let expected = serde_yml::from_reader::<_, serde_yml::Value>(
+            std::fs::File::open(testdata_path("multi_provider_tpl_output.yaml")).unwrap(),
+        )
+        .unwrap();
+
+        let result = gen_template(tpl, "multi_provider_tpl.yaml", two_urls()).unwrap();
+        let result_value = serde_yml::to_value(result).unwrap();
+
+        assert_eq!(result_value, expected);
+    }
+
+    #[test]
+    fn test_no_tpl_param_passthrough() {
+        let tpl = load_yaml(testdata_path("no_tpl_param_tpl.yaml")).unwrap();
+        let expected = serde_yml::from_reader::<_, serde_yml::Value>(
+            std::fs::File::open(testdata_path("no_tpl_param_tpl_output.yaml")).unwrap(),
+        )
+        .unwrap();
+
+        let result = gen_template(tpl, "no_tpl_param_tpl.yaml", two_urls()).unwrap();
+        let result_value = serde_yml::to_value(result).unwrap();
+
+        assert_eq!(result_value, expected);
+    }
+
+    #[test]
+    fn test_empty_uses() {
+        let tpl = load_yaml(testdata_path("empty_uses_tpl.yaml")).unwrap();
+        let expected = serde_yml::from_reader::<_, serde_yml::Value>(
+            std::fs::File::open(testdata_path("empty_uses_tpl_output.yaml")).unwrap(),
+        )
+        .unwrap();
+
+        let result = gen_template(tpl, "empty_uses_tpl.yaml", vec![]).unwrap();
+        let result_value = serde_yml::to_value(result).unwrap();
+
+        assert_eq!(result_value, expected);
+    }
+
+    #[test]
+    fn test_ordering_preserved_proxy_groups() {
+        let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "simple_tpl.yaml", one_url()).unwrap();
+
+        let groups = result
+            .get(PROXY_GROUPS)
+            .and_then(|v| v.as_sequence())
+            .unwrap();
+
+        // Expected order: Select, Auto-pvd0, Direct
+        let names: Vec<&str> = groups
+            .iter()
+            .filter_map(|g| g.get("name").and_then(|n| n.as_str()))
+            .collect();
+        assert_eq!(names, vec!["Select", "Auto-pvd0", "Direct"]);
+    }
+
+    #[test]
+    fn test_ordering_preserved_proxy_providers() {
+        let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "simple_tpl.yaml", one_url()).unwrap();
+
+        let providers = result
+            .get(PROXY_PROVIDERS)
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+
+        // Template entry pvd is expanded IN PLACE at its original position
+        // (pvd was first → pvd0 is first), then static (passthrough) follows
+        let keys: Vec<&str> = providers.keys().filter_map(|k| k.as_str()).collect();
+        assert_eq!(keys, vec!["pvd0", "static"]);
+    }
+
+    #[test]
+    fn test_angle_bracket_provider_placeholder() {
+        let tpl = load_yaml(testdata_path("multi_provider_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "multi_provider_tpl.yaml", two_urls()).unwrap();
+
+        let groups = result
+            .get(PROXY_GROUPS)
+            .and_then(|v| v.as_sequence())
+            .unwrap();
+
+        let all_in_one = groups
+            .iter()
+            .find(|g| g.get("name").and_then(|n| n.as_str()) == Some("AllInOne"))
+            .unwrap();
+
+        let uses: Vec<&str> = all_in_one
+            .get("use")
+            .and_then(|v| v.as_sequence())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+
+        assert_eq!(uses, vec!["pvd0", "pvd1", "pvd20", "pvd21"]);
+    }
+
+    #[test]
+    fn test_angle_bracket_group_placeholder() {
+        let tpl = load_yaml(testdata_path("multi_provider_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "multi_provider_tpl.yaml", two_urls()).unwrap();
+
+        let groups = result
+            .get(PROXY_GROUPS)
+            .and_then(|v| v.as_sequence())
+            .unwrap();
+
+        let select = groups
+            .iter()
+            .find(|g| g.get("name").and_then(|n| n.as_str()) == Some("Select"))
+            .unwrap();
+
+        let proxies: Vec<&str> = select
+            .get("proxies")
+            .and_then(|v| v.as_sequence())
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+
+        assert_eq!(
+            proxies,
+            vec!["DIRECT", "Auto-pvd0", "Auto-pvd1", "Fallback-pvd20", "Fallback-pvd21"]
+        );
+    }
+
+    #[test]
+    fn test_missing_proxy_providers_section() {
+        let tpl = load_yaml(testdata_path("missing_pp_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "missing_pp_tpl.yaml", one_url());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_proxy_groups_section() {
+        let tpl = load_yaml(testdata_path("missing_pg_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "missing_pg_tpl.yaml", one_url());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_tpl_param_providers_key() {
+        let tpl = load_yaml(testdata_path("missing_providers_key_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "missing_providers_key_tpl.yaml", one_url());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_placeholder_to_nonexistent_target() {
+        let tpl = load_yaml(testdata_path("bad_placeholder_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "bad_placeholder_tpl.yaml", one_url());
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_clashtui_marker_added() {
+        let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "simple_tpl.yaml", one_url()).unwrap();
+
+        assert!(result.contains_key("clashtui"));
+        assert_eq!(result.get("clashtui"), Some(&serde_yml::Value::Null));
+    }
+
+    #[test]
+    fn test_path_generation_format() {
+        let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
+        let result = gen_template(tpl, "simple_tpl.yaml", one_url()).unwrap();
+
+        let providers = result
+            .get(PROXY_PROVIDERS)
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+
+        let pvd0 = providers
+            .get(&serde_yml::Value::String("pvd0".to_string()))
+            .and_then(|v| v.as_mapping())
+            .unwrap();
+
+        let path = pvd0
+            .get(&serde_yml::Value::String("path".to_string()))
+            .and_then(|v| v.as_str())
+            .unwrap();
+
+        assert_eq!(path, "proxy-providers/tpl/simple_tpl/pvd0.yaml");
+    }
 }

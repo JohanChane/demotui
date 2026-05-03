@@ -1,0 +1,16 @@
+proxy-providers:
+  static:
+    type: http
+    interval: 3600
+    url: https://static.example.com/proxy.yaml
+    path: ./proxy-providers/static.yaml
+proxy-groups:
+  - name: Select
+    type: select
+    proxies:
+      - DIRECT
+  - name: Direct
+    type: select
+    proxies:
+      - DIRECT
+clashtui: null
