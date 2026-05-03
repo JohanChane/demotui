@@ -172,18 +172,6 @@ pub async fn update_profile(
             serde_yml::to_writer(std::fs::File::create(path)?, &content)?;
             Ok(format!("Regenerated: {}(From {template_name})", name))
         }
-        ProfileType::Github { url, token } => {
-            let lines = update_with(url, name, path, with_proxy, clash_cfg_dir, |url, with_proxy| {
-                crate::functions::restful::download::github(url, with_proxy, token)
-            });
-            Ok(lines.join("\n"))
-        }
-        ProfileType::GitLab { url, token } => {
-            let lines = update_with(url, name, path, with_proxy, clash_cfg_dir, |url, with_proxy| {
-                crate::functions::restful::download::gitlab(url, with_proxy, token)
-            });
-            Ok(lines.join("\n"))
-        }
     }
 }
 
@@ -203,6 +191,15 @@ pub fn select(profile: Profile) -> anyhow::Result<()> {
 pub fn extract_domain(url: &str) -> Option<&str> {
     if let Some(protocol_end) = url.find("://") {
         let rest = &url[(protocol_end + 3)..];
+        let rest = if let Some(at_pos) = rest.find('@') {
+            if let Some(slash_pos) = rest.find('/') {
+                if at_pos < slash_pos { &rest[(at_pos + 1)..] } else { rest }
+            } else {
+                &rest[(at_pos + 1)..]
+            }
+        } else {
+            rest
+        };
         return if let Some(path_start) = rest.find('/') {
             Some(&rest[..path_start])
         } else {
