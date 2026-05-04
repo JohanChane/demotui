@@ -3,6 +3,7 @@ proxy-providers:
     tpl_param:
     type: http
     interval: 3600
+    url: https://example.com/sub1.yaml
 proxy-groups:
   - name: Select
     type: select
@@ -16,6 +17,3 @@ proxy-groups:
         - pvd
     url: https://www.gstatic.com/generate_204
     interval: 300
-clashtui:
-  uses:
-    - sub1

@@ -1,43 +1,43 @@
 proxy-providers:
-  static:
-    type: file
-    path: ./proxy-providers/static.yaml
   pvd0:
     type: http
     interval: 3600
+    url: https://example.com/sub1.yaml
     health-check:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 300
-    url: https://example.com/sub1.yaml
     path: proxy-providers/tpl/multi_provider_tpl/pvd0.yaml
   pvd1:
     type: http
     interval: 3600
+    url: https://example.com/sub2.yaml
     health-check:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 300
-    url: https://example.com/sub2.yaml
     path: proxy-providers/tpl/multi_provider_tpl/pvd1.yaml
   pvd20:
     type: http
     interval: 7200
+    url: https://example.com/sub1.yaml
     health-check:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 600
-    url: https://example.com/sub1.yaml
     path: proxy-providers/tpl/multi_provider_tpl/pvd20.yaml
   pvd21:
     type: http
     interval: 7200
+    url: https://example.com/sub2.yaml
     health-check:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 600
-    url: https://example.com/sub2.yaml
     path: proxy-providers/tpl/multi_provider_tpl/pvd21.yaml
+  static:
+    type: file
+    path: ./proxy-providers/static.yaml
 proxy-groups:
   - name: Select
     type: select
@@ -84,4 +84,3 @@ proxy-groups:
     type: select
     proxies:
       - DIRECT
-clashtui: null
