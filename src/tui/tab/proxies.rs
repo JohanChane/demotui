@@ -1,6 +1,7 @@
-pub mod tree;
 pub mod content;
+pub mod handlers;
 pub mod render;
+pub mod tree;
 
 use super::dev::*;
 pub use content::Proxies;
