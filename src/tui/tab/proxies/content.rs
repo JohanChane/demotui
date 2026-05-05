@@ -2,7 +2,7 @@ use super::super::dev::*;
 use crate::functions::restful::proxies::{self};
 use indexmap::IndexMap;
 use std::collections::HashMap;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::tree::{NodeType, ProxyTree};
 
@@ -146,13 +146,35 @@ impl Proxies {
                         NodeType::Folder => {
                             self.error = Some(format!("Testing group {name}..."));
                             self.testing_since = Some(Instant::now());
+                            let t_secs = crate::config::CONFIG.cfg_file.timeout.unwrap_or(5).max(1) + 3;
+                            let (n, tu) = (name.clone(), test_url.clone());
                             async move {
-                                let delays = tri!(proxies::test_group_delay(&name, test_url.as_deref(), timeout));
-                                let mut response = match proxies::fetch_proxies() {
-                                    Ok(r) => r,
-                                    Err(e) => {
+                                let delays = match tokio::time::timeout(
+                                    Duration::from_secs(t_secs),
+                                    tokio::task::spawn_blocking(move || proxies::test_group_delay(&n, tu.as_deref(), timeout))
+                                ).await {
+                                    Ok(Ok(Ok(v))) => v,
+                                    Ok(Ok(Err(e))) => {
+                                        crate::tui::widget::popmsg::Confirm::err(e);
                                         return wrapper(move |content: &mut Self| {
-                                            content.error = Some(e.to_string());
+                                            content.testing_since = None;
+                                        });
+                                    }
+                                    _ => {
+                                        return wrapper(move |content: &mut Self| {
+                                            content.error = Some("Speed test timed out".to_string());
+                                            content.testing_since = None;
+                                        });
+                                    }
+                                };
+                                let mut response = match tokio::time::timeout(
+                                    Duration::from_secs(t_secs),
+                                    tokio::task::spawn_blocking(|| proxies::fetch_proxies())
+                                ).await {
+                                    Ok(Ok(Ok(r))) => r,
+                                    _ => {
+                                        return wrapper(move |content: &mut Self| {
+                                            content.error = Some("Failed to refresh proxies after test".to_string());
                                             content.testing_since = None;
                                         });
                                     }
@@ -176,21 +198,35 @@ impl Proxies {
                         _ => {
                             self.error = Some(format!("Testing {name}..."));
                             self.testing_since = Some(Instant::now());
+                            let t_secs = crate::config::CONFIG.cfg_file.timeout.unwrap_or(5).max(1) + 3;
+                            let (n, tu) = (name.clone(), test_url.clone());
                             async move {
-                                let delay = match proxies::test_proxy_delay(&name, test_url.as_deref(), timeout) {
-                                    Err(e) => {
+                                let delay = match tokio::time::timeout(
+                                    Duration::from_secs(t_secs),
+                                    tokio::task::spawn_blocking(move || proxies::test_proxy_delay(&n, tu.as_deref(), timeout))
+                                ).await {
+                                    Ok(Ok(Ok(v))) => v,
+                                    Ok(Ok(Err(e))) => {
                                         return wrapper(move |content: &mut Self| {
                                             content.error = Some(e.to_string());
                                             content.testing_since = None;
                                         });
                                     }
-                                    Ok(d) => d,
-                                };
-                                let mut response = match proxies::fetch_proxies() {
-                                    Ok(r) => r,
-                                    Err(e) => {
+                                    _ => {
                                         return wrapper(move |content: &mut Self| {
-                                            content.error = Some(e.to_string());
+                                            content.error = Some("Speed test timed out".to_string());
+                                            content.testing_since = None;
+                                        });
+                                    }
+                                };
+                                let mut response = match tokio::time::timeout(
+                                    Duration::from_secs(t_secs),
+                                    tokio::task::spawn_blocking(|| proxies::fetch_proxies())
+                                ).await {
+                                    Ok(Ok(Ok(r))) => r,
+                                    _ => {
+                                        return wrapper(move |content: &mut Self| {
+                                            content.error = Some("Failed to refresh proxies after test".to_string());
                                             content.testing_since = None;
                                         });
                                     }
@@ -230,30 +266,44 @@ impl Proxies {
                 self.error = Some(format!("Testing all ({total} groups/nodes)..."));
                 self.testing_since = Some(Instant::now());
                 async move {
+                    let t_secs = crate::config::CONFIG.cfg_file.timeout.unwrap_or(5).max(1) + 3;
                     let mut all_delays: HashMap<String, u64> = HashMap::new();
                     for name in &folders {
                         let url = proxies_map.get(name.as_str())
                             .and_then(|p| p.test_url.clone())
                             .or_else(|| crate::config::CONFIG.cfg_file.test_url.clone());
-                        if let Ok(delays) = proxies::test_group_delay(name, url.as_deref(), timeout) {
-                            all_delays.extend(delays);
+                        let n = name.clone();
+                        match tokio::time::timeout(
+                            Duration::from_secs(t_secs),
+                            tokio::task::spawn_blocking(move || proxies::test_group_delay(&n, url.as_deref(), timeout))
+                        ).await {
+                            Ok(Ok(Ok(delays))) => all_delays.extend(delays),
+                            _ => {}
                         }
                     }
                     for name in &files {
                         let url = proxies_map.get(name.as_str())
                             .and_then(|p| p.test_url.clone())
                             .or_else(|| crate::config::CONFIG.cfg_file.test_url.clone());
-                        if let Ok(Some(d)) = proxies::test_proxy_delay(name, url.as_deref(), timeout) {
-                            if d > 0 {
+                        let n = name.clone();
+                        match tokio::time::timeout(
+                            Duration::from_secs(t_secs),
+                            tokio::task::spawn_blocking(move || proxies::test_proxy_delay(&n, url.as_deref(), timeout))
+                        ).await {
+                            Ok(Ok(Ok(Some(d)))) if d > 0 => {
                                 all_delays.insert(name.clone(), d);
                             }
+                            _ => {}
                         }
                     }
-                    let mut response = match proxies::fetch_proxies() {
-                        Ok(r) => r,
-                        Err(e) => {
+                    let mut response = match tokio::time::timeout(
+                        Duration::from_secs(t_secs),
+                        tokio::task::spawn_blocking(|| proxies::fetch_proxies())
+                    ).await {
+                        Ok(Ok(Ok(r))) => r,
+                        _ => {
                             return wrapper(move |content: &mut Self| {
-                                content.error = Some(e.to_string());
+                                content.error = Some("Failed to refresh proxies after test".to_string());
                                 content.testing_since = None;
                             });
                         }
