@@ -81,20 +81,19 @@ impl Proxies {
                         NodeType::Folder => {
                             self.tree.toggle_expand_at(&name, &self.proxies);
                         }
-                        NodeType::Link => {
+                        NodeType::Link | NodeType::File => {
                             if let Some(ref parent) = parent {
+                                let timeout_ms = crate::config::CONFIG.cfg_file.timeout.unwrap_or(5) * 1000;
+                                let test_url = self.proxies.get(&name)
+                                    .and_then(|p| p.test_url.clone())
+                                    .or_else(|| crate::config::CONFIG.cfg_file.test_url.clone());
+                                self.error = Some(format!("Switching to {name}..."));
+                                self.testing_since = Some(Instant::now());
                                 Self::spawn_select_inline(
                                     parent.clone(),
                                     name.clone(),
-                                    task_set,
-                                );
-                            }
-                        }
-                        NodeType::File => {
-                            if let Some(ref parent) = parent {
-                                Self::spawn_select_inline(
-                                    parent.clone(),
-                                    name.clone(),
+                                    test_url,
+                                    timeout_ms,
                                     task_set,
                                 );
                             }
@@ -381,14 +380,35 @@ impl TabContent for Proxies {
 }
 
 impl Proxies {
-    fn spawn_select_inline(group: String, node: String, task_set: &mut FutureSet<Self>) {
+    fn spawn_select_inline(
+        group: String,
+        node: String,
+        _test_url: Option<String>,
+        _timeout_ms: u64,
+        task_set: &mut FutureSet<Self>,
+    ) {
+        let t_secs = crate::config::CONFIG.cfg_file.timeout.unwrap_or(5).max(1) + 3;
         async move {
             let _ = tri!(proxies::select_proxy(&group, &node), or_cancel);
-            let response = tri!(proxies::fetch_proxies(), or_cancel);
+            let response = match tokio::time::timeout(
+                Duration::from_secs(t_secs),
+                tokio::task::spawn_blocking(|| proxies::fetch_proxies()),
+            )
+            .await
+            {
+                Ok(Ok(Ok(r))) => r,
+                _ => {
+                    return wrapper(move |content: &mut Self| {
+                        content.error = None;
+                        content.testing_since = None;
+                    });
+                }
+            };
             wrapper(move |content: &mut Self| {
                 content.proxies = response.proxies;
                 content.tree.rebuild_from_proxies(&content.proxies);
                 content.error = None;
+                content.testing_since = None;
             })
         }
         .spawn_at(task_set);
