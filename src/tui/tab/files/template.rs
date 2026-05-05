@@ -2,6 +2,7 @@ use super::*;
 use crate::functions::command::edit;
 use crate::functions::file::template::*;
 use crate::tui::widget::popmsg::Confirm;
+use std::cell::Cell;
 
 mod_agent!(
     Key,
@@ -16,8 +17,10 @@ mod_agent!(
         ([KeyCode::Char('k')], Key::MoveUp, ""),
         ([KeyCode::Char('d'), KeyCode::Char('d')], Key::Action(Action::Delete), "Delete template"),
         ([KeyCode::Char('e')], Key::Action(Action::Edit), ""),
+        ([KeyCode::Char('E')], Key::Action(Action::EditProviders), "Edit template_proxy_providers file"),
         ([KeyCode::Char('p')], Key::Action(Action::Preview), ""),
         ([KeyCode::Enter], Key::Action(Action::Generate), ""),
+        ([KeyCode::Char('f')], Key::Action(Action::FzfFind), "Fuzzy find template"),
         ([KeyCode::Char('g'), KeyCode::Char('g')], Key::Action(Action::GoTop), "Go to top"),
         ([KeyCode::Char('G')], Key::Action(Action::GoEnd), "Go to end"),
         ([KeyCode::Char('/')], Key::Action(Action::Search), "Search/Filter"),
@@ -29,8 +32,10 @@ pub enum Action {
     Generate,
     Delete,
     Edit,
+    EditProviders,
     Preview,
     Search,
+    FzfFind,
     GoTop,
     GoEnd,
 }
@@ -69,6 +74,7 @@ impl TryFrom<&crate::tui::Key> for Key {
 pub struct Template {
     items: Vec<String>,
     filter: Option<String>,
+    jump_target: Cell<Option<usize>>,
 }
 
 impl BasicTabContent for Template {
@@ -112,6 +118,15 @@ impl DualTabContentMate for Template {
                 match action {
                     Action::GoTop => state.select_first(),
                     Action::GoEnd => state.select_last(),
+                    Action::FzfFind => {
+                        let items = self.items.clone();
+                        actions::fzf_find(items).spawn_at(task_set);
+                        return false;
+                    }
+                    Action::EditProviders => {
+                        action.act(String::new()).spawn_at(task_set);
+                        return false;
+                    }
                     _ => {
                         let name = get_name!(self, state);
                         log::debug!("Template::Action name={name}");
@@ -125,6 +140,10 @@ impl DualTabContentMate for Template {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State, is_focused: bool) {
+        if let Some(idx) = self.jump_target.take() {
+            state.select(Some(idx));
+        }
+
         // Clamp cursor to valid range
         if let Some(idx) = state.selected() {
             if self.items.is_empty() {
@@ -180,8 +199,10 @@ mod actions {
                 Self::Generate => generate(name).await,
                 Self::Delete => delete(name).await,
                 Self::Edit => _edit(name).await,
+                Self::EditProviders => _edit_providers().await,
                 Self::Preview => preview(name).await,
                 Self::Search => search().await,
+                Self::FzfFind => unreachable!("FzfFind handled directly"),
                 Self::GoTop | Self::GoEnd => do_nothing(),
             }
         }
@@ -191,8 +212,14 @@ mod actions {
     type C = (<Template as DualTabContentMate>::Mate, Template);
 
     async fn generate(name: String) -> CB {
-        let profile_name = format!("{name}.generated");
-        tri!(apply_template(&name, &profile_name));
+        let profile_name = format!("{name}.tpl");
+        let groups = tri!(read_template_proxy_providers());
+        let is_singbox = crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox;
+        if is_singbox {
+            tri!(apply_template_singbox(&name, &profile_name, &groups, false, false).await);
+        } else {
+            tri!(apply_template(&name, &profile_name, &groups));
+        }
         sync!(C)
     }
 
@@ -204,7 +231,7 @@ mod actions {
             return do_nothing();
         }
 
-        let path = crate::config::template_path().join(&name);
+        let path = crate::functions::file::TEMPLATE_PATH.join(&name);
         match std::fs::remove_file(&path) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -221,8 +248,18 @@ mod actions {
     }
 
     async fn _edit(name: String) -> CB {
-        let path = crate::config::template_path().join(&name);
+        let path = crate::functions::file::TEMPLATE_PATH.join(&name);
         log::debug!("template::_edit: path={}", path.display());
+        tri!(edit(path.to_str().unwrap()));
+        do_nothing()
+    }
+
+    async fn _edit_providers() -> CB {
+        let path = match crate::config::CONFIG.core_type() {
+            crate::config::CoreType::Mihomo => crate::config::template_proxy_providers_path(),
+            crate::config::CoreType::Singbox => crate::config::singbox_template_proxy_providers_path(),
+        };
+        log::debug!("template::_edit_providers: path={}", path.display());
         tri!(edit(path.to_str().unwrap()));
         do_nothing()
     }
@@ -242,6 +279,18 @@ mod actions {
 
         wrapper(|(_, content): &mut C| {
             content.filter = (!filter.is_empty()).then_some(filter);
+        })
+    }
+
+    pub(super) async fn fzf_find(items: Vec<String>) -> CB {
+        let selected = tokio::task::spawn_blocking(move || {
+            crate::tui::widget::fzffind::run_fzf(&items, "Find Template")
+        })
+        .await
+        .unwrap_or(None);
+
+        wrapper(move |(_, content): &mut C| {
+            content.jump_target.set(selected);
         })
     }
 }

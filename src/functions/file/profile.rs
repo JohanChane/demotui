@@ -1,6 +1,7 @@
 mod profile;
 
 use super::PROFILE_YAMLS_PATH;
+use super::PROFILE_JSONS_PATH;
 use crate::config::database::{Profile, ProfileType};
 
 pub mod db {
@@ -13,11 +14,16 @@ pub mod db {
         Ok(pm.get(name).unwrap())
     }
     pub fn remove(pf: Profile) -> anyhow::Result<()> {
-        if let Err(e) = std::fs::remove_file(PROFILE_YAMLS_PATH.join(format!("{}.yaml", &pf.name))) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                log::warn!("Failed to Remove profile file: {e}")
+        for path in [
+            PROFILE_JSONS_PATH.join(format!("{}.json", &pf.name)),
+            PROFILE_YAMLS_PATH.join(format!("{}.yaml", &pf.name)),
+        ] {
+            if let Err(e) = std::fs::remove_file(&path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    log::warn!("Failed to Remove profile file {}: {e}", path.display());
+                }
             }
-        };
+        }
         let mut pm = pm!();
         pm.remove(pf.name);
         pm.to_file()
@@ -27,7 +33,7 @@ pub mod db {
     }
     pub fn get_all() -> Vec<Profile> {
         let pm = pm!();
-        pm.all().into_iter().map(|k| pm.get(k).unwrap()).collect()
+        pm.all_for_core().into_iter().map(|k| pm.get(k).unwrap()).collect()
     }
     pub fn get_current() -> Profile {
         pm!().get_current().unwrap_or_default()
@@ -51,6 +57,15 @@ pub fn import_profile_from_file(source_path: &str, profile_name: &str) -> anyhow
     let source = std::path::Path::new(source_path);
     anyhow::ensure!(source.exists(), "Source file not found: {source_path}");
     anyhow::ensure!(source.is_file(), "Source path is not a file: {source_path}");
+
+    let is_json = source
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+
+    if is_json {
+        return import_singbox_profile(source, profile_name);
+    }
 
     let content: serde_yml::Mapping = {
         let file = std::fs::File::open(source)?;
@@ -82,6 +97,35 @@ pub fn import_profile_from_file(source_path: &str, profile_name: &str) -> anyhow
     Ok(pm.get(profile_name).unwrap())
 }
 
+fn import_singbox_profile(source: &std::path::Path, profile_name: &str) -> anyhow::Result<Profile> {
+    let file = std::fs::File::open(source)?;
+    let content: serde_json::Value = serde_json::from_reader(file)
+        .map_err(|e| anyhow::anyhow!("Invalid JSON in source file: {e}"))?;
+
+    anyhow::ensure!(
+        content.get("outbounds").is_some_and(|v| v.is_array()),
+        "Not a valid sing-box JSON profile (missing 'outbounds' array)"
+    );
+
+    if let Some(parent) = PROFILE_JSONS_PATH.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::create_dir_all(&*PROFILE_JSONS_PATH)?;
+
+    let dest = PROFILE_JSONS_PATH.join(format!("{profile_name}.json"));
+    if dest.exists() {
+        anyhow::bail!(
+            "Profile '{profile_name}' already exists in profile_jsons/"
+        );
+    }
+    std::fs::copy(source, &dest)?;
+
+    let mut pm = pm!();
+    pm.insert(profile_name, ProfileType::Singbox);
+    pm.to_file()?;
+    Ok(pm.get(profile_name).unwrap())
+}
+
 pub struct UpdateResult {
     pub name: String,
     pub net_updates: Vec<crate::functions::file::net_resource::NetResourceUpdate>,
@@ -92,6 +136,18 @@ pub async fn update_profile(
     with_proxy: bool,
 ) -> anyhow::Result<UpdateResult> {
     use super::template::fetch_net_resource_statuses;
+
+    // Template profiles re-generate from template + subscriptions
+    if matches!(profile.dtype, ProfileType::Template { .. }) {
+        return update_template_profile(profile, with_proxy).await;
+    }
+
+    // sing-box local imports always use JSON; URL profiles follow current core type
+    if matches!(profile.dtype, ProfileType::Singbox)
+        || crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox
+    {
+        return update_singbox_profile(profile, with_proxy).await;
+    }
 
     let path = PROFILE_YAMLS_PATH.join(format!("{}.yaml", &profile.name));
 
@@ -125,10 +181,111 @@ pub async fn update_profile(
     })
 }
 
+async fn update_singbox_profile(
+    profile: Profile,
+    with_proxy: bool,
+) -> anyhow::Result<UpdateResult> {
+    let path = PROFILE_JSONS_PATH.join(format!("{}.json", &profile.name));
+
+    if let ProfileType::Url(ref url) = profile.dtype {
+        let mut response = crate::functions::restful::download::profile(url, with_proxy)?;
+        let content: serde_json::Value = serde_json::from_reader(&mut response)
+            .map_err(|e| anyhow::anyhow!("Failed to parse downloaded profile JSON: {e}"))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = std::fs::File::create(&path)?;
+        serde_json::to_writer_pretty(file, &content)?;
+    }
+
+    anyhow::ensure!(
+        path.exists(),
+        "Profile file not found: {}. Download it first.",
+        path.display()
+    );
+
+    let content: serde_json::Value = {
+        let file = std::fs::File::open(&path)?;
+        serde_json::from_reader(file)
+            .map_err(|e| anyhow::anyhow!("Failed to read profile JSON: {e}"))?
+    };
+
+    let net_resources =
+        crate::functions::file::net_resource::extract_singbox_net_resources(&content);
+    let base_dir = std::path::Path::new(
+        &crate::config::CONFIG.cfg_file.singbox.core.config_dir,
+    );
+    let net_updates = crate::functions::file::template::fetch_net_resource_statuses_from_resources(
+        &net_resources,
+        base_dir,
+        with_proxy,
+    )
+    .await;
+
+    Ok(UpdateResult {
+        name: profile.name,
+        net_updates,
+    })
+}
+
+async fn update_template_profile(
+    profile: Profile,
+    with_proxy: bool,
+) -> anyhow::Result<UpdateResult> {
+    use crate::functions::file::net_resource::{NetResourceUpdate, ResourceSection};
+
+    let (template, groups) = match &profile.dtype {
+        ProfileType::Template { template, proxy_provider_groups } => (template.clone(), proxy_provider_groups.clone()),
+        _ => anyhow::bail!("update_template_profile called on non-Template profile"),
+    };
+
+    let is_singbox = crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox;
+    let mut statuses: Vec<NetResourceUpdate> = Vec::new();
+
+    if is_singbox {
+        super::template::apply_template_singbox(&template, &profile.name, &groups, with_proxy, true).await?;
+        for (_, providers) in &groups {
+            for (name, url) in providers {
+                let domain = extract_domain(url).unwrap_or("unknown");
+                statuses.push(NetResourceUpdate {
+                    name: name.clone(),
+                    url: url.clone(),
+                    path: String::new(),
+                    section: ResourceSection::ProxyProvider,
+                    ok: true,
+                    error: None,
+                });
+            }
+        }
+    } else {
+        super::template::apply_template(&template, &profile.name, &groups)?;
+        let path = PROFILE_YAMLS_PATH.join(format!("{}.yaml", &profile.name));
+        if path.exists() {
+            let content: serde_yml::Mapping = {
+                let file = std::fs::File::open(&path)?;
+                serde_yml::from_reader(file)
+                    .map_err(|e| anyhow::anyhow!("Failed to read generated profile YAML: {e}"))?
+            };
+            statuses = super::template::fetch_net_resource_statuses(&content, with_proxy).await;
+        }
+    }
+
+    Ok(UpdateResult {
+        name: profile.name,
+        net_updates: statuses,
+    })
+}
+
 pub async fn select(profile: Profile) -> anyhow::Result<()> {
     use super::template::{fetch_net_resource_statuses, update_profile_without_pp};
 
-    let cfg = &crate::config::CONFIG.cfg_file.basic;
+    if matches!(profile.dtype, ProfileType::Singbox)
+        || crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox
+    {
+        return select_singbox(profile).await;
+    }
+
+    let cfg = &crate::config::CONFIG.cfg_file.mihomo.core;
     let mut lprofile = profile.clone().load_local_profile()?;
     anyhow::ensure!(
         lprofile.content.is_some(),
@@ -147,7 +304,7 @@ pub async fn select(profile: Profile) -> anyhow::Result<()> {
     rewrite_provider_paths(lprofile.content.as_mut());
 
     lprofile.merge(&crate::config::load_basic()?)?;
-    let out_path = std::path::absolute(std::path::PathBuf::from(&cfg.clash_config_path))
+    let out_path = std::path::absolute(std::path::PathBuf::from(&cfg.config_path))
         .map_err(|e| anyhow::anyhow!("Failed to resolve config path: {e}"))?;
     lprofile.path = out_path.clone();
     lprofile.sync_to_disk()?;
@@ -160,7 +317,7 @@ pub async fn select(profile: Profile) -> anyhow::Result<()> {
 fn rewrite_provider_paths(content: Option<&mut serde_yml::Mapping>) {
     let Some(content) = content else { return };
     let cache = std::path::PathBuf::from(
-        &crate::config::CONFIG.cfg_file.basic.clash_config_dir,
+        &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
     );
     for section in &["proxy-providers", "rule-providers"] {
         let Some(serde_yml::Value::Mapping(providers)) = content.get_mut(*section) else {
@@ -174,6 +331,58 @@ fn rewrite_provider_paths(content: Option<&mut serde_yml::Mapping>) {
             *path_val = serde_yml::Value::String(abs_path.display().to_string());
         }
     }
+}
+
+async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
+    let path = super::PROFILE_JSONS_PATH.join(format!("{}.json", &profile.name));
+    anyhow::ensure!(
+        path.exists(),
+        "Profile {} file not found: {}. Download it first.",
+        profile.name, path.display()
+    );
+
+    let mut profile_content: serde_json::Value = {
+        let file = std::fs::File::open(&path)?;
+        serde_json::from_reader(file)
+            .map_err(|e| anyhow::anyhow!("Failed to read profile JSON: {e}"))?
+    };
+
+    match crate::config::load_basic_singbox() {
+        Ok(core_override) => {
+            if let (Some(profile_obj), Some(override_obj)) =
+                (profile_content.as_object_mut(), core_override.as_object())
+            {
+                for (key, value) in override_obj {
+                    profile_obj.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to load core override singbox config: {e}, using profile as-is");
+        }
+    }
+
+    let out_path = std::path::absolute(std::path::PathBuf::from(
+        &crate::config::CONFIG.cfg_file.singbox.core.config_path,
+    ))
+    .map_err(|e| anyhow::anyhow!("Failed to resolve singbox config path: {e}"))?;
+
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let file = std::fs::File::create(&out_path)?;
+    serde_json::to_writer(file, &profile_content)?;
+
+    db::set_current(profile)?;
+    let restart_out = crate::functions::command::restart_core_service(
+        None,
+        crate::config::CoreType::Singbox,
+    )
+    .map_err(|e| anyhow::anyhow!("Config written but service restart failed: {e}"))?;
+    if restart_out.starts_with("Error") {
+        return Err(anyhow::anyhow!("Service restart failed:\n{restart_out}"));
+    }
+    Ok(())
 }
 
 pub fn extract_domain(url: &str) -> Option<&str> {
