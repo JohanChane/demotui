@@ -65,7 +65,6 @@ enum SrvCtlOp {
     Stop,
     Restart,
     SetPermission,
-    FixFilePermissions,
 }
 
 impl SrvCtlOp {
@@ -74,16 +73,10 @@ impl SrvCtlOp {
             Self::Stop => "Stop Service",
             Self::Restart => "Start Service",
             Self::SetPermission => "Set Permission",
-            Self::FixFilePermissions => "Fix File Permissions",
         }
     }
     fn all() -> Vec<Self> {
-        vec![
-            Self::Stop,
-            Self::Restart,
-            Self::SetPermission,
-            Self::FixFilePermissions,
-        ]
+        vec![Self::Stop, Self::Restart, Self::SetPermission]
     }
 }
 
@@ -180,7 +173,7 @@ impl TabContent for SrvCtlContent {
                 let needs_sudo = !self.is_user;
 
                 async move {
-                    let password = if needs_sudo && op != SrvCtlOp::FixFilePermissions {
+                    let password = if needs_sudo {
                         let pw = tri!(
                             InputMasked::new()
                                 .with_title("Sudo Password".to_owned())
@@ -259,20 +252,7 @@ impl TabContent for SrvCtlContent {
                                 &bin_path, pw_ref,
                             ))
                         }
-                        SrvCtlOp::FixFilePermissions => {
-                            let dir = std::path::Path::new(&config_dir);
-                            let group = crate::functions::command::get_dir_group_name(dir);
-                            let Some(group) = group else {
-                                crate::tui::widget::popmsg::Confirm::err(anyhow::anyhow!(
-                                    "Cannot determine group of '{}'. Does the directory exist?",
-                                    config_dir
-                                ));
-                                return do_nothing();
-                            };
-                            handle!(
-                                crate::functions::command::repair_file_permissions(dir, &group)
-                            )
-                        }
+
                     }
                 }
                 .spawn_at(task_set);
