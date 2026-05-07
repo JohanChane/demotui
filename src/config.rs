@@ -26,7 +26,10 @@ pub mod v0_2_3;
 pub const CONFIG: Wrapper = Wrapper;
 
 static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+static CONFIG_ROOT: OnceLock<PathBuf> = OnceLock::new();
 static _CONFIG: OnceLock<Config> = OnceLock::new();
+
+const CORE_SUBDIR: &str = "mihomo";
 
 /// Wrapper around [Config], only propose is be deref-ed as [Config]
 ///
@@ -89,7 +92,7 @@ impl Config {
 }
 
 pub fn init(base_path: Option<PathBuf>) -> Result<()> {
-    let path = {
+    let config_root = {
         let path = if let Some(path) = base_path {
             path.to_path_buf()
         } else {
@@ -109,7 +112,16 @@ pub fn init(base_path: Option<PathBuf>) -> Result<()> {
         std::path::absolute(&path).context(format!("{} is not an absolute path", path.display()))?
     };
 
-    if DATA_DIR.set(path).is_err() || _CONFIG.set(Config::load()?).is_err() {
+    let core_dir = config_root.join(CORE_SUBDIR);
+    std::fs::create_dir_all(&core_dir).context(format!(
+        "Failed to create mihomo config directory: {}",
+        core_dir.display()
+    ))?;
+    let core_dir = std::path::absolute(&core_dir)
+        .context(format!("{} is not an absolute path", core_dir.display()))?;
+
+    CONFIG_ROOT.set(config_root).ok();
+    if DATA_DIR.set(core_dir).is_err() || _CONFIG.set(Config::load()?).is_err() {
         unreachable!("init twice")
     }
 
@@ -138,10 +150,13 @@ pub fn init_config() -> Result<()> {
 
 #[cfg(feature = "customized-theme")]
 pub fn theme_path() -> PathBuf {
-    DATA_DIR.get().unwrap().join(defs::TEMPLATE_DIR)
+    DATA_DIR.get().unwrap().join(defs::THEME_FILE)
 }
 pub fn config_dir_path() -> PathBuf {
     DATA_DIR.get().unwrap().clone()
+}
+pub fn config_root_path() -> PathBuf {
+    CONFIG_ROOT.get().unwrap().clone()
 }
 pub fn template_path() -> PathBuf {
     DATA_DIR.get().unwrap().join(defs::TEMPLATE_DIR)
