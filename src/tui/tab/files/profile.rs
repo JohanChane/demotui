@@ -318,6 +318,15 @@ mod actions {
     }
 
     async fn toggle_no_pp(name: String) -> CB {
+        {
+            let pf = tri!(db::get(&name).ok_or_else(|| anyhow::anyhow!("Profile not found")));
+            if pf.dtype == crate::config::database::ProfileType::Singbox {
+                Confirm::err(anyhow::anyhow!(
+                    "no_pp is not applicable for sing-box profiles (proxy-provider not supported)"
+                ));
+                return do_nothing();
+            }
+        }
         tri!(db::toggle_no_pp(&name));
 
         let (names, atime) = get_profiles_with_readable_atime();
@@ -454,9 +463,11 @@ pub(super) fn get_profiles_with_readable_atime() -> (Vec<String>, Vec<String>) {
         .map(|pf| {
             let name = pf.name.clone();
             let no_pp = pf.no_pp;
+            let is_singbox = pf.dtype == ProfileType::Singbox;
             let domain = match &pf.dtype {
                 ProfileType::File => "local import".to_owned(),
                 ProfileType::Url(url) => extract_domain(url).unwrap_or("unknown").to_owned(),
+                ProfileType::Singbox => "singbox profile".to_owned(),
             };
             let atime = pf
                 .load_local_profile()
@@ -464,7 +475,13 @@ pub(super) fn get_profiles_with_readable_atime() -> (Vec<String>, Vec<String>) {
                 .and_then(|lp| lp.atime())
                 .map(display_duration)
                 .unwrap_or_else(|| "Unknown".to_owned());
-            let no_pp_str = if no_pp { "nopp" } else { "" };
+            let no_pp_str = if is_singbox {
+                "N/A"
+            } else if no_pp {
+                "nopp"
+            } else {
+                ""
+            };
             (name, format!("{domain}|{atime}|{no_pp_str}"))
         })
         .collect();
