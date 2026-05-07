@@ -136,3 +136,11 @@ Custom macros (defined in `src/tui/tab/mod.rs`, `src/tui/widget/mod.rs`, `src/co
 ## OpenSpec
 
 This repo uses OpenSpec (`openspec/config.yaml`) with `schema: spec-driven`. Active changes live in `openspec/changes/`. Run `openspec` commands or use the openspec skills in `.opencode/skills/`.
+
+## Documentation
+
+Key docs are in `docs/`:
+- `docs/dev.md` — tab development guide, trait details
+- `docs/design.md` — overall design
+- `docs/get_started.md` — setup guide
+- `docs/support_singbox/` — sing-box vs mihomo comparison (`cmd.md`, `config.md`, `api_data.md`) and support analysis (`singbox_support.md`)

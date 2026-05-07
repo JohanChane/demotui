@@ -185,7 +185,7 @@ impl App {
                     Some('c') => {
                         log::debug!("open_dir: config dir");
                         let _ = crate::functions::command::open_dir(
-                            crate::config::config_dir_path().to_str().unwrap(),
+                            crate::config::config_root_path().to_str().unwrap(),
                         );
                     }
                     Some('m') => {

@@ -96,6 +96,7 @@ pub async fn update_profile_without_pp(
     }
     #[derive(serde::Deserialize, serde::Serialize, Debug)]
     struct PGitem {
+        #[serde(rename = "use")]
         #[serde(skip_serializing_if = "Option::is_none")]
         us_: Option<Vec<String>>,
         #[serde(skip_serializing_if = "Option::is_none")]
