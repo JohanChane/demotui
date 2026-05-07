@@ -1,8 +1,9 @@
 use super::dev::*;
+use crate::config::CoreType;
 use ratatui::text::Line;
 use ratatui::widgets::ListItem;
 
-newtype_tab!(SrvCtlTab(Tab<SrvCtlContent>));
+newtype_tab!(CoreSrvCtlTab(Tab<SrvCtlContent>));
 
 mod_agent!(
     SrvCtlKey,
@@ -64,7 +65,7 @@ macro_rules! tri {
 enum SrvCtlOp {
     Stop,
     Restart,
-    SetPermission,
+    SwitchCore,
 }
 
 impl SrvCtlOp {
@@ -72,11 +73,11 @@ impl SrvCtlOp {
         match self {
             Self::Stop => "Stop Service",
             Self::Restart => "Start Service",
-            Self::SetPermission => "Set Permission",
+            Self::SwitchCore => "Switch Core",
         }
     }
     fn all() -> Vec<Self> {
-        vec![Self::Stop, Self::Restart, Self::SetPermission]
+        vec![Self::Stop, Self::Restart, Self::SwitchCore]
     }
 }
 
@@ -87,6 +88,7 @@ struct SrvCtlContent {
     bin_path: String,
     is_user: bool,
     status: String,
+    core_label: String,
 }
 
 impl SrvCtlContent {
@@ -119,7 +121,7 @@ impl BasicTabContent for SrvCtlContent {
 
     type State = ListState;
 
-    const TITLE: &str = "ClashSrvCtl";
+    const TITLE: &str = "CoreSrvCtl";
 
     fn all_shortcuts() -> &'static [(KeyCombo, Self::Key, &'static str)] {
         agent::all_shortcuts()
@@ -129,15 +131,33 @@ impl BasicTabContent for SrvCtlContent {
 impl TabContent for SrvCtlContent {
     fn init(&mut self, task_set: &mut FutureSet<Self>, state: &mut Self::State) {
         self.ops = SrvCtlOp::all();
-        self.service_name = crate::config::CONFIG.cfg_file.service.clash_service_name.clone();
-        if self.service_name.is_empty() {
-            self.service_name = "clashtui_mihomo".to_owned();
+        let cfg = &crate::config::CONFIG.cfg_file;
+        match cfg.core_type {
+            CoreType::Mihomo => {
+                self.service_name = cfg.service.clash_service_name.clone();
+                if self.service_name.is_empty() {
+                    self.service_name = "clashtui_mihomo".to_owned();
+                }
+                self.bin_path = cfg.basic.clash_bin_path.clone();
+                if self.bin_path.is_empty() {
+                    self.bin_path = "/usr/bin/mihomo".to_owned();
+                }
+                self.is_user = cfg.service.is_user;
+                self.core_label = "mihomo".to_owned();
+            }
+            CoreType::Singbox => {
+                self.service_name = cfg.service.singbox_service_name.clone();
+                if self.service_name.is_empty() {
+                    self.service_name = "clashtui_singbox".to_owned();
+                }
+                self.bin_path = cfg.singbox.singbox_bin_path.clone();
+                if self.bin_path.is_empty() {
+                    self.bin_path = "/usr/bin/sing-box".to_owned();
+                }
+                self.is_user = cfg.service.singbox_is_user;
+                self.core_label = "sing-box".to_owned();
+            }
         }
-        self.bin_path = crate::config::CONFIG.cfg_file.basic.clash_bin_path.clone();
-        if self.bin_path.is_empty() {
-            self.bin_path = "/usr/bin/mihomo".to_owned();
-        }
-        self.is_user = crate::config::CONFIG.cfg_file.service.is_user;
         self.status = "...".to_owned();
         if !self.ops.is_empty() {
             state.select(Some(0));
@@ -169,7 +189,6 @@ impl TabContent for SrvCtlContent {
                 let op = *op;
 
                 let bin_path = self.bin_path.clone();
-                let config_dir = crate::config::CONFIG.cfg_file.basic.clash_config_dir.clone();
                 let needs_sudo = !self.is_user;
 
                 async move {
@@ -247,12 +266,44 @@ impl TabContent for SrvCtlContent {
                                 "active"
                             )
                         }
-                        SrvCtlOp::SetPermission => {
-                            handle!(crate::functions::command::set_permission(
-                                &bin_path, pw_ref,
-                            ))
-                        }
+                        SrvCtlOp::SwitchCore => {
+                            let old_type = crate::config::CONFIG.cfg_file.core_type;
+                            let new_type = match old_type {
+                                CoreType::Mihomo => CoreType::Singbox,
+                                CoreType::Singbox => CoreType::Mihomo,
+                            };
+                            let new_label = match new_type {
+                                CoreType::Mihomo => "mihomo",
+                                CoreType::Singbox => "sing-box",
+                            };
 
+                            // stop old core before switching
+                            if let Err(e) =
+                                crate::functions::command::stop_core_service(pw_ref, old_type)
+                            {
+                                log::warn!("Failed to stop old core: {e}");
+                            }
+
+                            match (|| -> anyhow::Result<()> {
+                                crate::config::CONFIG.data.lock().unwrap().core_type = new_type;
+                                crate::config::CONFIG.save()
+                            })() {
+                                Ok(()) => {
+                                    wrapper(move |c: &mut SrvCtlContent| {
+                                        c.core_label = new_label.to_owned();
+                                    });
+                                    crate::tui::widget::popmsg::Confirm::title("OK".to_owned())
+                                        .with_prompt(format!(
+                                            "Core changed to {new_label}. Restart demotui for changes to take effect."
+                                        ))
+                                        .build_and_send();
+                                }
+                                Err(e) => {
+                                    crate::tui::widget::popmsg::Confirm::err(e);
+                                }
+                            }
+                            do_nothing()
+                        }
                     }
                 }
                 .spawn_at(task_set);
@@ -265,7 +316,10 @@ impl TabContent for SrvCtlContent {
         let user_tag = if self.is_user { " (user)" } else { "" };
         let block = Block::bordered()
             .border_style(Theme::get().tab.tab_focused)
-            .title(format!("{} — {}{}", Self::TITLE, self.service_name, user_tag))
+            .title(format!(
+                "{} — {} (core: {}){}",
+                Self::TITLE, self.service_name, self.core_label, user_tag
+            ))
             .title_bottom(
                 Line::raw(format!(" {} ", self.status))
                     .right_aligned()

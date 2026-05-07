@@ -1,6 +1,7 @@
 mod profile;
 
 use super::PROFILE_YAMLS_PATH;
+use super::PROFILE_JSONS_PATH;
 use crate::config::database::{Profile, ProfileType};
 
 pub mod db {
@@ -13,7 +14,12 @@ pub mod db {
         Ok(pm.get(name).unwrap())
     }
     pub fn remove(pf: Profile) -> anyhow::Result<()> {
-        if let Err(e) = std::fs::remove_file(PROFILE_YAMLS_PATH.join(format!("{}.yaml", &pf.name))) {
+        let file_to_remove = if pf.dtype == ProfileType::Singbox {
+            PROFILE_JSONS_PATH.join(format!("{}.json", &pf.name))
+        } else {
+            PROFILE_YAMLS_PATH.join(format!("{}.yaml", &pf.name))
+        };
+        if let Err(e) = std::fs::remove_file(&file_to_remove) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 log::warn!("Failed to Remove profile file: {e}")
             }
@@ -27,7 +33,7 @@ pub mod db {
     }
     pub fn get_all() -> Vec<Profile> {
         let pm = pm!();
-        pm.all().into_iter().map(|k| pm.get(k).unwrap()).collect()
+        pm.all_for_core().into_iter().map(|k| pm.get(k).unwrap()).collect()
     }
     pub fn get_current() -> Profile {
         pm!().get_current().unwrap_or_default()
@@ -51,6 +57,15 @@ pub fn import_profile_from_file(source_path: &str, profile_name: &str) -> anyhow
     let source = std::path::Path::new(source_path);
     anyhow::ensure!(source.exists(), "Source file not found: {source_path}");
     anyhow::ensure!(source.is_file(), "Source path is not a file: {source_path}");
+
+    let is_json = source
+        .extension()
+        .map(|e| e.eq_ignore_ascii_case("json"))
+        .unwrap_or(false);
+
+    if is_json {
+        return import_singbox_profile(source, profile_name);
+    }
 
     let content: serde_yml::Mapping = {
         let file = std::fs::File::open(source)?;
@@ -82,6 +97,35 @@ pub fn import_profile_from_file(source_path: &str, profile_name: &str) -> anyhow
     Ok(pm.get(profile_name).unwrap())
 }
 
+fn import_singbox_profile(source: &std::path::Path, profile_name: &str) -> anyhow::Result<Profile> {
+    let file = std::fs::File::open(source)?;
+    let content: serde_json::Value = serde_json::from_reader(file)
+        .map_err(|e| anyhow::anyhow!("Invalid JSON in source file: {e}"))?;
+
+    anyhow::ensure!(
+        content.get("outbounds").is_some_and(|v| v.is_array()),
+        "Not a valid sing-box JSON profile (missing 'outbounds' array)"
+    );
+
+    if let Some(parent) = PROFILE_JSONS_PATH.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::create_dir_all(&*PROFILE_JSONS_PATH)?;
+
+    let dest = PROFILE_JSONS_PATH.join(format!("{profile_name}.json"));
+    if dest.exists() {
+        anyhow::bail!(
+            "Profile '{profile_name}' already exists in profile_jsons/"
+        );
+    }
+    std::fs::copy(source, &dest)?;
+
+    let mut pm = pm!();
+    pm.insert(profile_name, ProfileType::Singbox);
+    pm.to_file()?;
+    Ok(pm.get(profile_name).unwrap())
+}
+
 pub struct UpdateResult {
     pub name: String,
     pub net_updates: Vec<crate::functions::file::net_resource::NetResourceUpdate>,
@@ -92,6 +136,10 @@ pub async fn update_profile(
     with_proxy: bool,
 ) -> anyhow::Result<UpdateResult> {
     use super::template::fetch_net_resource_statuses;
+
+    if profile.dtype == ProfileType::Singbox {
+        return update_singbox_profile(profile, with_proxy).await;
+    }
 
     let path = PROFILE_YAMLS_PATH.join(format!("{}.yaml", &profile.name));
 
@@ -125,8 +173,59 @@ pub async fn update_profile(
     })
 }
 
+async fn update_singbox_profile(
+    profile: Profile,
+    with_proxy: bool,
+) -> anyhow::Result<UpdateResult> {
+    let path = PROFILE_JSONS_PATH.join(format!("{}.json", &profile.name));
+
+    if let ProfileType::Url(ref url) = profile.dtype {
+        let mut response = crate::functions::restful::download::profile(url, with_proxy)?;
+        let content: serde_json::Value = serde_json::from_reader(&mut response)
+            .map_err(|e| anyhow::anyhow!("Failed to parse downloaded profile JSON: {e}"))?;
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = std::fs::File::create(&path)?;
+        serde_json::to_writer(file, &content)?;
+    }
+
+    anyhow::ensure!(
+        path.exists(),
+        "Profile file not found: {}. Download it first.",
+        path.display()
+    );
+
+    let content: serde_json::Value = {
+        let file = std::fs::File::open(&path)?;
+        serde_json::from_reader(file)
+            .map_err(|e| anyhow::anyhow!("Failed to read profile JSON: {e}"))?
+    };
+
+    let net_resources =
+        crate::functions::file::net_resource::extract_singbox_net_resources(&content);
+    let base_dir = std::path::Path::new(
+        &crate::config::CONFIG.cfg_file.singbox.singbox_config_dir,
+    );
+    let net_updates = crate::functions::file::template::fetch_net_resource_statuses_from_resources(
+        &net_resources,
+        base_dir,
+        with_proxy,
+    )
+    .await;
+
+    Ok(UpdateResult {
+        name: profile.name,
+        net_updates,
+    })
+}
+
 pub async fn select(profile: Profile) -> anyhow::Result<()> {
     use super::template::{fetch_net_resource_statuses, update_profile_without_pp};
+
+    if profile.dtype == ProfileType::Singbox {
+        todo!("sing-box config generation not yet implemented");
+    }
 
     let cfg = &crate::config::CONFIG.cfg_file.basic;
     let mut lprofile = profile.clone().load_local_profile()?;
