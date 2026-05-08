@@ -92,7 +92,7 @@ pub async fn apply_template_singbox(
     // atomic write
     let tmp_path = output_path.with_extension("json.tmp");
     let file = std::fs::File::create(&tmp_path)?;
-    serde_json::to_writer(file, &gened)?;
+    serde_json::to_writer_pretty(file, &gened)?;
     std::fs::rename(&tmp_path, &output_path)?;
     let mut pm = pm!();
     pm.insert(profile_name, ProfileType::Template {
