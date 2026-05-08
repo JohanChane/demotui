@@ -83,11 +83,8 @@ pub async fn apply_template_singbox(
     let path = TEMPLATE_PATH.join(template_name);
     let file = std::fs::File::open(&path)
         .inspect_err(|e| log::error!("Opening template {template_name}:{e}"))?;
-    let map: serde_yml::Mapping = serde_yml::from_reader(file)?;
-    let _version = map
-        .get("clashtui_template_version")
-        .and_then(|v| v.as_u64());
-    let gened = singbox::gen_template_singbox(map, template_name, urls, with_proxy).await?;
+    let map: serde_json::Value = serde_json::from_reader(file)?;
+    let gened = singbox::gen_template_singbox(&map, template_name, urls, with_proxy).await?;
     let output_path = PROFILE_JSONS_PATH.join(format!("{profile_name}.json"));
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
