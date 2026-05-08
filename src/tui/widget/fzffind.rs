@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 
 pub fn run_fzf(items: &[String], prompt: &str) -> Option<usize> {
     crate::tui::EXT_PROC.store(true, Ordering::SeqCst);
-    crate::tui::suspend_terminal(false);
+    crate::tui::suspend_terminal();
 
     let mut child = match Command::new("fzf")
         .args([
