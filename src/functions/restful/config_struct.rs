@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 pub struct ClashConfig {
     // Core infos
     pub mode: Mode,
-    pub tun: TunConfig,
+    #[serde(default)]
+    pub tun: Option<TunConfig>,
     // Extend infos
     pub log_level: Option<LogLevel>,
     pub bind_address: Option<String>,
@@ -54,8 +55,9 @@ impl ClashConfig {
             geo_update_interval,
             find_process_mode,
         } = self;
-        build!(mode, tun,
+        build!(mode,
             #Option
+            tun,
             log_level,
             bind_address,
             allow_lan,
@@ -75,8 +77,11 @@ impl ClashConfig {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, strum::VariantArray)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
+    #[serde(alias = "Rule")]
     Rule,
+    #[serde(alias = "Global")]
     Global,
+    #[serde(alias = "Direct")]
     Direct,
 }
 impl std::fmt::Display for Mode {
