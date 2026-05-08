@@ -1,19 +1,35 @@
-# Profile Template
+# Profile Template (Unified — mihomo + sing-box)
 
-Templates let you define a parameterized clash configuration that expands into a full profile YAML. Template proxy-providers carry their own URLs — no external URL list is needed. Generation simply strips `tpl_param` markers and expands `<>` placeholders.
+Templates let you define a parameterized configuration that expands into a full profile. The same template syntax works for both mihomo (YAML output) and sing-box (JSON output). Template proxy-provider subscriptions are stored per-profile in the database — each template profile records its template file name and subscription URLs.
 
 ## Overview
 
-A template is a standard Clash YAML file with two extra features:
+A template is a standard Clash-style YAML file with two extra features:
 
 1. **`tpl_param`** markers on `proxy-providers` and `proxy-groups` entries — these entries are templates that expand at generation time
 2. **`<>`** angle-bracket placeholders in `use` and `proxies` lists — these reference template entries and expand to all generated names
 
-URLs come from the **template proxy-provider entries themselves**. Each `tpl_param` proxy-provider must include a `url` field. No external URL list or database lookup is needed.
+### Profile Storage
 
-When you generate a template, demotui reads the template YAML, removes all `tpl_param` markers, expands `<>` placeholders, and writes the result to `profile_yamls/<profile_name>.yaml`.
+**Profile types** in the database (`clashtui.db`):
 
-**Output YAML preserves the section ordering of the input template.** Entries appear in the same relative order — template entries keep their original position.
+| Type | Description |
+|------|-------------|
+| `File` | Local file imported to `profile_yamls/` |
+| `Url(url)` | Downloaded from a subscription URL |
+| `Template { template, urls }` | Generated from a template file with per-profile subscription URLs |
+| `Singbox` | sing-box JSON profile |
+
+### Per-Core Output
+
+| Backend | Template dir | Output dir | Format |
+|---------|-------------|------------|--------|
+| mihomo | `mihomo/templates/` | `profile_yamls/<name>.yaml` | YAML with proxy-providers |
+| sing-box | `sing-box/templates/` | `profile_jsons/<name>.json` | JSON with embedded outbounds |
+
+### Migration
+
+Legacy template-generated profiles (previously stored as `!File`) are auto-migrated to `!Template` on startup. The migration detects the `clashtui` marker in profile YAML files and converts the database entry. Migrated profiles have an empty URL list — users should add subscription URLs via regeneration.
 
 ## Template YAML Format
 
@@ -170,21 +186,25 @@ If a placeholder references a non-existent target, generation fails with an erro
 
 ## Profile Storage
 
-demotui uses two directories under the config root:
+demotui uses per-core directories under the config root:
 
 | Directory | Purpose |
 |-----------|---------|
-| `templates/` | Template YAML files with `tpl_param` markers |
-| `profile_yamls/` | All profile YAML (generated, imported, and downloaded) |
+| `mihomo/templates/` | Mihomo template YAML files with `tpl_param` markers |
+| `mihomo/profile_yamls/` | All mihomo profile YAML (generated, imported, and downloaded) |
+| `sing-box/templates/` | sing-box template YAML files with `tpl_param` markers |
+| `sing-box/profile_jsons/` | All sing-box profile JSON (generated, imported, and downloaded) |
 
 **Profile types** in the database (`clashtui.db`):
 
 | Type | Description |
 |------|-------------|
-| `File` | Local file imported to `profile_yamls/`, or generated from template |
+| `File` | Local file imported to `profile_yamls/` |
 | `Url` | Downloaded from a subscription URL |
+| `Template { template, urls }` | Generated from a template with per-profile subscription URLs |
+| `Singbox` | sing-box JSON profile imported directly |
 
-Template-generated profiles are registered as `ProfileType::File` — they are indistinguishable from imported files. Legacy `!Template` and `!Generated` entries auto-migrate to `!File` on load.
+Legacy `!Generated` entries auto-migrate to `!Template` with empty URLs on load. Legacy `!File` entries with `clashtui` marker in their YAML are auto-migrated to `!Template` with inferred template name and empty URLs.
 
 ## File Path Import
 
@@ -199,16 +219,19 @@ The file is copied to `profile_yamls/<name>.yaml` and registered as `ProfileType
 
 ## Full Workflow
 
+### Mihomo Template Workflow
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │  1. CREATE TEMPLATE                                              │
-│     Write a clash YAML file with tpl_param markers and URLs.      │
-│     Place in config directory: templates/my-template.yaml        │
+│     Write a clash YAML file with tpl_param markers.              │
+│     Place in config directory: mihomo/templates/my-template.yaml │
 ├──────────────────────────────────────────────────────────────────┤
 │  2. GENERATE PROFILE                                             │
 │     In Template tab, select template → press Enter.               │
-│     Creates profile_yamls/<name>.generated.yaml                  │
-│     Registered as ProfileType::File in the database.             │
+│     Enter profile name and subscription URLs (comma-separated).   │
+│     Creates profile_yamls/<name>.yaml                             │
+│     Registered as ProfileType::Template in the database.         │
 ├──────────────────────────────────────────────────────────────────┤
 │  3. SELECT PROFILE                                               │
 │     In Profile pane, select the profile → press Enter.           │
@@ -216,9 +239,34 @@ The file is copied to `profile_yamls/<name>.yaml` and registered as `ProfileType
 │     to the clash config path.                                    │
 ├──────────────────────────────────────────────────────────────────┤
 │  4. UPDATE PROFILE                                               │
-│     Press 'u' to re-read the file from profile_yamls/.           │
+│     Press 'u' to re-generate from template using recorded URLs.   │
 │     Press 'a' 'u' to update all profiles.                        │
 └──────────────────────────────────────────────────────────────────┘
+```
+
+### sing-box Template Workflow
+
+sing-box has no proxy-provider concept, so templates generate self-contained JSON with all proxies embedded as `outbounds[]` entries.
+
+1. **Create template** — same template syntax as mihomo. Place in `sing-box/templates/`.
+2. **Generate profile** — prompts for profile name and subscription URLs. Downloads subscriptions, parses proxy nodes, and generates `profile_jsons/<name>.json`.
+3. **Update** — re-downloads subscriptions and re-generates the JSON. No proxy-providers in the output — all proxies are inlined.
+
+### sing-box Template Output Format
+
+Template concepts map to sing-box as follows:
+
+| Template | sing-box Output |
+|----------|----------------|
+| `proxy-providers.pvd` with `tpl_param` | Downloaded proxies → `outbounds[{type: vmess/shadowsocks, tag: ..., ...}]` |
+| `proxy-groups[].type: select` | `outbounds[{type: selector, tag: <name>, outbounds: [...]}]` |
+| `proxy-groups[].type: url-test` | `outbounds[{type: urltest, tag: <name>, outbounds: [...], url: ..., interval: "5m"}]` |
+| `use: [pvd0]` | `outbounds` references by `tag` |
+| `rules` inline strings | `route.rules[{domain_suffix: [...], outbound: ...}]` |
+| `rule-providers` | `route.rule_set[{tag: ..., type: remote, url: ...}]` |
+| `MATCH,Target` | `route.final: "Target"` |
+
+Proxy-provider identities use hardcoded prefix `pvd`: `pvd0`, `pvd1`, etc. Proxy-group name is always `pvd`.
 ```
 
 ## Complete Example
