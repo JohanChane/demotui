@@ -131,6 +131,11 @@ impl App {
 
         app.check_startup_perms();
         while !QUIT.load(Ordering::Relaxed) {
+            if crate::tui::EXT_PROC.load(Ordering::SeqCst) {
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                continue;
+            }
+
             if RESIZE.swap(false, Ordering::Relaxed) {
                 terminal.autoresize()?;
             }

@@ -270,13 +270,11 @@ mod actions {
     }
 
     pub(super) async fn fzf_find(items: Vec<String>) -> CB {
-        let selected = tri!(
-            crate::tui::widget::fzffind::FzfFind::new(items)
-                .with_title("Find Profile".to_owned())
-                .build_and_send()
-                .await,
-            or_cancel
-        );
+        let selected = tokio::task::spawn_blocking(move || {
+            crate::tui::widget::fzffind::run_fzf(&items, "Find Profile")
+        })
+        .await
+        .unwrap_or(None);
 
         wrapper(move |(content, _): &mut C| {
             content.jump_target.set(selected);
