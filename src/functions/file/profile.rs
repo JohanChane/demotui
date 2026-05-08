@@ -196,7 +196,7 @@ async fn update_singbox_profile(
             std::fs::create_dir_all(parent)?;
         }
         let file = std::fs::File::create(&path)?;
-        serde_json::to_writer(file, &content)?;
+        serde_json::to_writer_pretty(file, &content)?;
     }
 
     anyhow::ensure!(
