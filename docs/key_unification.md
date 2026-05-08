@@ -151,6 +151,7 @@ Modifier ordering: `D-` → `C-` → `A-` → `S-`.
 | CSI u probing method | Simple: write query, sleep 50ms, read stdin | Integrated into multi-query `Emulator::read_until_da1()` alongside cursor shape, blink, and device attribute queries |
 | `Key::plain()` | `pub fn plain(&self) -> Option<char>` — returns char only if no ctrl/alt/super modifiers | No equivalent |
 | Named F-keys in Display | Only `F(1)` via the catch-all `_ => "Unknown"` | Explicitly names `F(1)` through `F(19)` |
+| Fzf implementation | External `fzf` binary via subprocess | External `fzf` binary via Lua plugin |
 | Event acquisition | `crossterm::EventStream` via `futures_lite::StreamExt` | Custom `Signals` task with `tokio::sync::mpsc::unbounded_channel` |
 | Resize handling | Atomic flag (`RESIZE.store(true, ...)`) checked at top of next frame | Direct repaint on resize event |
 | Key routing | Six-layer dispatch: PopUp → GlobalChord → Help → Chord → Tab → Global | Layer system: Which → Cmp → Help → Confirm → Input → Pick → Spot → Tasks → Mgr |
@@ -168,6 +169,49 @@ Demotui targets users who run clash-based proxy management, typically on desktop
 | `src/tui.rs` | CSI u probing in `init()`, flag teardown in `restore()` |
 | `src/tui/key.rs` | `Key` struct, `From<KeyEvent>`, `FromStr`, `Display`, `plain()` |
 | `src/tui/app.rs` | Event loop: `KeyEvent` → `Key::from()` → six-layer dispatch |
+
+## External Fzf Integration
+
+Demotui delegates fuzzy finding to the external `fzf` binary (just like Yazi).
+
+### Implementation
+
+`src/tui/widget/fzffind.rs` exports a single function:
+
+```rust
+pub fn run_fzf(items: &[String], prompt: &str) -> Option<usize>
+```
+
+Flow:
+1. `crate::tui::EXT_PROC` atomic flag is set → prevents event loop rendering
+2. `crate::tui::hold(true)` → exits raw mode, restoring terminal to normal
+3. `fzf` is spawned with `--delimiter='\t' --with-nth=2`:
+   - Input lines: `{index}\t{display_name}` — fzf displays only `display_name`
+   - Output: the full line — first tab-delimited field is the selected index
+4. On completion: `hold(false)` → re-enters raw mode, `EXT_PROC` cleared
+5. `FULL_RENDER` notified for full terminal redraw
+
+### Call sites
+
+| Tab | File | Trigger |
+|-----|------|---------|
+| Profile | `src/tui/tab/files/profile.rs:272` | `f` key → `Action::FzfFind` |
+| Template | `src/tui/tab/files/template.rs:262` | `f` key → `Action::FzfFind` |
+| Proxies | `src/tui/tab/proxies/handlers.rs:22` | `f` key → `Key::FzfFind` |
+
+All call sites use `tokio::task::spawn_blocking` to offload the synchronous fzf subprocess from the async runtime. The event loop is prevented from rendering while the external process runs via `crate::tui::EXT_PROC: AtomicBool`.
+
+### Comparison: demotui vs Yazi fzf approach
+
+| Aspect | demotui | Yazi |
+|--------|---------|------|
+| Invocation | `std::process::Command::new("fzf")` | `Command("fzf")` via Lua plugin |
+| Terminal mode | Exits raw mode before fzf, re-enters after | fzf inherits terminal, sets up own state |
+| Input format | `{idx}\t{name}` with `--with-nth=2` | File paths, one per line |
+| Output parsing | Parse `\t`-delimited first field as index | Parse selected file path directly |
+| Selection mapping | Index mapped to content item position | Path matched back to file entry |
+| Event loop | Skipped via `EXT_PROC` atomic flag during fzf | Plugin blocks Lua task; event loop continues |
+| Dependency | `fzf` must be in `$PATH` | `fzf` listed as system dependency in packaging |
 
 ## Test Coverage
 
