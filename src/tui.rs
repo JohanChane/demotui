@@ -1,7 +1,6 @@
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use crossterm::event::{KeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
 use utils::*;
 
 mod agent;
@@ -45,41 +44,60 @@ fn probe_csi_u() {
     }
 }
 
+fn enable_csi_u() {
+    let _ = write!(std::io::stdout(), "\x1b[=5u");
+    let _ = std::io::stdout().flush();
+}
+
+fn disable_csi_u() {
+    let _ = write!(std::io::stdout(), "\x1b[=0u");
+    let _ = std::io::stdout().flush();
+}
+
 pub fn init() -> anyhow::Result<()> {
     agent::init()?;
     theme::Theme::load();
     raw_mode::setup()?;
     probe_csi_u();
     if CSI_U_ENABLED.load(Ordering::Relaxed) {
-        let _ = crossterm::execute!(
-            std::io::stdout(),
-            PushKeyboardEnhancementFlags(
-                KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
-                    | KeyboardEnhancementFlags::REPORT_ALTERNATE_KEYS,
-            )
-        );
+        enable_csi_u();
     }
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::cursor::Hide);
     raw_mode::set_panic_hook();
     Ok(())
 }
 
 pub fn restore() -> anyhow::Result<()> {
-    if CSI_U_ENABLED.swap(false, Ordering::Relaxed) {
-        use crossterm::event::PopKeyboardEnhancementFlags;
-        let _ = crossterm::execute!(std::io::stdout(), PopKeyboardEnhancementFlags);
-    }
-    raw_mode::restore()?;
+    suspend_terminal(true);
     Ok(())
 }
 
-/// Leave RawMode and get back to main screen
 pub fn hold(on: bool) -> anyhow::Result<()> {
     if on {
         raw_mode::restore()?;
-        // tell ratatui to re-render
         app::FULL_RENDER.notify_one();
     } else {
         raw_mode::setup()?
     }
+    Ok(())
+}
+
+pub fn suspend_terminal(permanent: bool) {
+    if permanent {
+        CSI_U_ENABLED.store(false, Ordering::Relaxed);
+    }
+    disable_csi_u();
+    let _ = raw_mode::restore();
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::cursor::Show);
+    app::FULL_RENDER.notify_one();
+}
+
+pub fn resume_terminal() -> anyhow::Result<()> {
+    raw_mode::setup()?;
+    if CSI_U_ENABLED.load(Ordering::Relaxed) {
+        enable_csi_u();
+    }
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::cursor::Hide);
+    raw_mode::set_panic_hook();
     Ok(())
 }
