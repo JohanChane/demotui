@@ -4,6 +4,10 @@ use super::PROFILE_YAMLS_PATH;
 use super::PROFILE_JSONS_PATH;
 use crate::config::database::{Profile, ProfileType};
 
+fn is_singbox_profile(pf: &Profile) -> bool {
+    pf.dtype == ProfileType::Singbox || pm!().contains_in_singbox(&pf.name)
+}
+
 pub mod db {
     use super::*;
 
@@ -14,7 +18,7 @@ pub mod db {
         Ok(pm.get(name).unwrap())
     }
     pub fn remove(pf: Profile) -> anyhow::Result<()> {
-        let file_to_remove = if pf.dtype == ProfileType::Singbox {
+        let file_to_remove = if is_singbox_profile(&pf) {
             PROFILE_JSONS_PATH.join(format!("{}.json", &pf.name))
         } else {
             PROFILE_YAMLS_PATH.join(format!("{}.yaml", &pf.name))
@@ -137,7 +141,7 @@ pub async fn update_profile(
 ) -> anyhow::Result<UpdateResult> {
     use super::template::fetch_net_resource_statuses;
 
-    if profile.dtype == ProfileType::Singbox {
+    if is_singbox_profile(&profile) {
         return update_singbox_profile(profile, with_proxy).await;
     }
 
@@ -223,7 +227,7 @@ async fn update_singbox_profile(
 pub async fn select(profile: Profile) -> anyhow::Result<()> {
     use super::template::{fetch_net_resource_statuses, update_profile_without_pp};
 
-    if profile.dtype == ProfileType::Singbox {
+    if is_singbox_profile(&profile) {
         return select_singbox(profile).await;
     }
 

@@ -149,11 +149,17 @@ pub struct ProfileManager {
     singbox: ProfileDataBase,
 }
 impl ProfileManager {
+    pub fn contains_in_singbox(&self, name: &str) -> bool {
+        self.singbox.contains_key(name)
+    }
+
     pub fn insert<S: AsRef<str>>(&mut self, name: S, dtype: ProfileType) -> Option<Profile> {
-        let db = if dtype == ProfileType::Singbox {
-            &mut self.singbox
-        } else {
-            &mut self.mihomo
+        let db = match dtype {
+            ProfileType::Singbox => &mut self.singbox,
+            ProfileType::Url(_) if self.core_type == crate::config::CoreType::Singbox => {
+                &mut self.singbox
+            }
+            _ => &mut self.mihomo,
         };
         db.insert(name.as_ref().into(), ProfileData::new(dtype))
             .map(|data| Profile {

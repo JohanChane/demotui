@@ -300,7 +300,12 @@ mod actions {
             }
             {
                 let mut pm = crate::config::CONFIG.data.lock().unwrap();
-                pm.insert(&name, crate::config::database::ProfileType::Singbox);
+                let dtype = if is_url {
+                    crate::config::database::ProfileType::Url(source.clone())
+                } else {
+                    crate::config::database::ProfileType::Singbox
+                };
+                pm.insert(&name, dtype);
                 tri!(pm.to_file());
             }
         } else if is_url {
@@ -337,7 +342,13 @@ mod actions {
     async fn toggle_no_pp(name: String) -> CB {
         {
             let pf = tri!(db::get(&name).ok_or_else(|| anyhow::anyhow!("Profile not found")));
-            if pf.dtype == crate::config::database::ProfileType::Singbox {
+            if pf.dtype == crate::config::database::ProfileType::Singbox
+                || crate::config::CONFIG
+                    .data
+                    .lock()
+                    .unwrap()
+                    .contains_in_singbox(&pf.name)
+            {
                 Confirm::err(anyhow::anyhow!(
                     "no_pp is not applicable for sing-box profiles (proxy-provider not supported)"
                 ));
@@ -480,7 +491,12 @@ pub(super) fn get_profiles_with_readable_atime() -> (Vec<String>, Vec<String>) {
         .map(|pf| {
             let name = pf.name.clone();
             let no_pp = pf.no_pp;
-            let is_singbox = pf.dtype == ProfileType::Singbox;
+            let is_singbox = pf.dtype == ProfileType::Singbox
+                || crate::config::CONFIG
+                    .data
+                    .lock()
+                    .unwrap()
+                    .contains_in_singbox(&pf.name);
             let domain = match &pf.dtype {
                 ProfileType::File => "local import".to_owned(),
                 ProfileType::Url(url) => extract_domain(url).unwrap_or("unknown").to_owned(),
