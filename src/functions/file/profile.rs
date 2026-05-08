@@ -5,7 +5,7 @@ use super::PROFILE_JSONS_PATH;
 use crate::config::database::{Profile, ProfileType};
 
 fn is_singbox_profile(pf: &Profile) -> bool {
-    pf.dtype == ProfileType::Singbox || pm!().contains_in_singbox(&pf.name)
+    pm!().contains_in_singbox(&pf.name)
 }
 
 pub mod db {
@@ -141,6 +141,11 @@ pub async fn update_profile(
 ) -> anyhow::Result<UpdateResult> {
     use super::template::fetch_net_resource_statuses;
 
+    // Template profiles re-generate from template + subscriptions
+    if matches!(profile.dtype, ProfileType::Template { .. }) {
+        return update_template_profile(profile, with_proxy).await;
+    }
+
     if is_singbox_profile(&profile) {
         return update_singbox_profile(profile, with_proxy).await;
     }
@@ -221,6 +226,52 @@ async fn update_singbox_profile(
     Ok(UpdateResult {
         name: profile.name,
         net_updates,
+    })
+}
+
+async fn update_template_profile(
+    profile: Profile,
+    with_proxy: bool,
+) -> anyhow::Result<UpdateResult> {
+    use crate::functions::file::net_resource::{NetResourceUpdate, ResourceSection};
+
+    let (template, urls) = match &profile.dtype {
+        ProfileType::Template { template, urls } => (template.clone(), urls.clone()),
+        _ => anyhow::bail!("update_template_profile called on non-Template profile"),
+    };
+
+    let is_singbox = is_singbox_profile(&profile);
+    let mut statuses: Vec<NetResourceUpdate> = Vec::new();
+
+    if is_singbox {
+        super::template::apply_template_singbox(&template, &profile.name, &urls, with_proxy).await?;
+        for url in &urls {
+            let domain = extract_domain(url).unwrap_or("unknown");
+            statuses.push(NetResourceUpdate {
+                name: "subscription".into(),
+                url: url.clone(),
+                path: String::new(),
+                section: ResourceSection::ProxyProvider,
+                ok: true,
+                error: None,
+            });
+        }
+    } else {
+        super::template::apply_template(&template, &profile.name, &urls)?;
+        let path = PROFILE_YAMLS_PATH.join(format!("{}.yaml", &profile.name));
+        if path.exists() {
+            let content: serde_yml::Mapping = {
+                let file = std::fs::File::open(&path)?;
+                serde_yml::from_reader(file)
+                    .map_err(|e| anyhow::anyhow!("Failed to read generated profile YAML: {e}"))?
+            };
+            statuses = super::template::fetch_net_resource_statuses(&content, with_proxy).await;
+        }
+    }
+
+    Ok(UpdateResult {
+        name: profile.name,
+        net_updates: statuses,
     })
 }
 

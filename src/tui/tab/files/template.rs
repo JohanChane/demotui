@@ -191,8 +191,34 @@ mod actions {
     type C = (<Template as DualTabContentMate>::Mate, Template);
 
     async fn generate(name: String) -> CB {
-        let profile_name = format!("{name}.generated");
-        tri!(apply_template(&name, &profile_name));
+        let profile_name = tri!(
+            Input::new()
+                .with_title("Profile Name".to_owned())
+                .with_prompt(format!("Default: {name}.generated"))
+                .build_and_send()
+                .await,
+            or_cancel
+        );
+        let profile_name = if profile_name.is_empty() {
+            format!("{name}.generated")
+        } else {
+            profile_name
+        };
+
+        let url_input = tri!(
+            Input::new()
+                .with_title("Subscription URLs (comma-separated)".to_owned())
+                .build_and_send()
+                .await,
+            or_cancel
+        );
+        let urls: Vec<String> = url_input
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        tri!(apply_template(&name, &profile_name, &urls));
         sync!(C)
     }
 
