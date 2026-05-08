@@ -1,6 +1,7 @@
 use crate::functions::command::{edit, test_config};
 use crate::functions::file::profile::{db, select, update_profile};
 use crate::tui::widget::popmsg::Confirm;
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::sync::atomic::Ordering;
 
@@ -26,6 +27,7 @@ mod_agent!(
         ([KeyCode::Char('a'), KeyCode::Char('u')], Key::Action(Action::UpdateAll), "Update all"),
         ([KeyCode::Char('/')], Key::Action(Action::Search), ""),
         ([KeyCode::Char('t')], Key::Action(Action::Test), ""),
+        ([KeyCode::Char('f')], Key::Action(Action::FzfFind), "Fuzzy find profile"),
         ([KeyCode::Char('g'), KeyCode::Char('g')], Key::Action(Action::GoTop), "Go to top"),
         ([KeyCode::Char('G')], Key::Action(Action::GoEnd), "Go to end"),
         ([KeyCode::Char('N')], Key::Action(Action::ToggleNoPp), "Toggle no proxy-provider"),
@@ -53,6 +55,7 @@ pub enum Action {
     UpdateAll,
     Search,
     Test,
+    FzfFind,
     GoTop,
     GoEnd,
     ToggleNoPp,
@@ -81,10 +84,10 @@ impl TryFrom<&crate::tui::Key> for Key {
 #[derive(Default)]
 pub struct Profile {
     items: Vec<String>,
-    // atime: Vec<Option<Duration>>,
     atime: Vec<String>,
     filter: Option<String>,
     updating: HashSet<String>,
+    jump_target: Cell<Option<usize>>,
 }
 
 impl BasicTabContent for Profile {
@@ -127,6 +130,10 @@ impl DualTabContent for Profile {
             Key::Action(action) => match action {
                 Action::GoTop => state.select_first(),
                 Action::GoEnd => state.select_last(),
+                Action::FzfFind => {
+                    let items = self.items.clone();
+                    actions::fzf_find(items).spawn_at(task_set)
+                }
                 Action::Add | Action::ImportFile => {
                     action.act(String::new()).spawn_at(task_set)
                 }
@@ -149,6 +156,10 @@ impl DualTabContent for Profile {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State, is_focused: bool) {
+        if let Some(idx) = self.jump_target.take() {
+            state.select(Some(idx));
+        }
+
         // Clamp cursor to valid range
         if let Some(idx) = state.selected() {
             if self.items.is_empty() {
@@ -234,6 +245,7 @@ mod actions {
                 Self::Update => update(name).await,
                 Self::Test => test(name).await,
                 Self::ToggleNoPp => toggle_no_pp(name).await,
+                Self::FzfFind => unreachable!("FzfFind handled directly"),
                 Self::GoTop | Self::GoEnd => do_nothing(),
                 Self::UpdateAll => unreachable!("UpdateAll handled directly in handle_key_event"),
             }
@@ -254,6 +266,20 @@ mod actions {
 
         wrapper(|(content, _): &mut C| {
             content.filter = (!filter.is_empty()).then_some(filter);
+        })
+    }
+
+    pub(super) async fn fzf_find(items: Vec<String>) -> CB {
+        let selected = tri!(
+            crate::tui::widget::fzffind::FzfFind::new(items)
+                .with_title("Find Profile".to_owned())
+                .build_and_send()
+                .await,
+            or_cancel
+        );
+
+        wrapper(move |(content, _): &mut C| {
+            content.jump_target.set(selected);
         })
     }
 

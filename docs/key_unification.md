@@ -1,0 +1,179 @@
+# Key Unification: Cross-Platform / Cross-Terminal Key Handling
+
+Demotui's approach to ensuring consistent key events across terminal emulators and operating systems.
+
+---
+
+## Architecture
+
+Two complementary mechanisms ensure that the same physical key press produces the same `Key` struct regardless of terminal emulator, OS, or whether CSI u is available:
+
+| Layer | Mechanism | When |
+|-------|-----------|------|
+| Terminal protocol | CSI u (kitty keyboard protocol) probing | `tui::init()`, before event loop |
+| Application code | `Key::from(KeyEvent)` normalization | Every key press, in the event loop |
+
+---
+
+## Layer 1: CSI u Keyboard Enhancement
+
+### Probing (`src/tui.rs:27-37`)
+
+During `tui::init()`, after `raw_mode::setup()`:
+
+1. Write the CSI u query `\x1b[?u` to stdout and flush
+2. Sleep 50ms to allow the terminal to respond
+3. Read raw bytes from stdin (up to 32 bytes)
+4. Check if the response contains `\x1b[?0u` — this means the terminal supports the kitty keyboard protocol
+5. If supported, push `KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES | REPORT_ALTERNATE_KEYS`
+
+### Teardown (`src/tui.rs:41-44`)
+
+On `restore()`, if CSI u was enabled, pop the keyboard enhancement flags before restoring raw mode.
+
+### What CSI u provides
+
+When a terminal supports CSI u and these flags are enabled, it reports modifier-key combinations using unambiguous escape codes. For example:
+
+| Physical press | Without CSI u | With CSI u |
+|---------------|---------------|------------|
+| `Ctrl+Shift+a` | May be reported as `Ctrl+a` (ambiguous) | Unambiguous escape code |
+| `Alt+Enter` | May be indistinguishable from `Enter` | Unambiguous escape code |
+| `Super+b` | Often not reported at all | Unambiguous escape code |
+
+Terminals known to support CSI u: kitty, WezTerm, Ghostty, foot, Konsole (newer versions), iTerm2 (with preferences enabled), Windows Terminal (1.20+).
+
+Terminals without CSI u support still work — the application-level normalization (Layer 2) handles the most common cross-platform discrepancies.
+
+---
+
+## Layer 2: Application-Level Normalization
+
+### Key Struct (`src/tui/key.rs:5-12`)
+
+```rust
+pub struct Key {
+    pub code:   KeyCode,   // crossterm's KeyCode enum
+    pub shift:  bool,
+    pub ctrl:   bool,
+    pub alt:    bool,
+    pub super_: bool,
+}
+```
+
+Modifiers are **flat booleans**, not a bitmask. This makes equality comparison (`PartialEq`, `Hash`) straightforward.
+
+### `From<KeyEvent>` Normalization (`src/tui/key.rs:29-50`)
+
+The conversion from crossterm's raw `KeyEvent` applies three fixups:
+
+#### (a) Alphabetic shift inference
+
+```rust
+(KeyCode::Char(c), _) if c.is_ascii_uppercase() => shift = true
+```
+
+Shift is derived from the character's case (`'A'` → shift=true, `'a'` → shift=false), **not** from `KeyModifiers::SHIFT`. This handles the cross-platform disparity where:
+
+- **Unix**: `Shift+a` may produce `Char('A')` with **no** SHIFT modifier
+- **Windows**: `Shift+a` may produce `Char('A')` **with** SHIFT modifier
+
+Both produce `Key { code: Char('A'), shift: true }`.
+
+#### (b) Non-alphabetic shift stripping
+
+```rust
+(KeyCode::Char(c), m) if !c.is_ascii_alphabetic() && m.contains(SHIFT) => shift = false
+```
+
+Non-alphabetic characters like `~`, `!`, `@`, `#` already represent their shifted form. On Windows, crossterm reports these with a SHIFT modifier; on Unix, it does not. Stripping the SHIFT flag ensures both platforms produce identical `Key` values:
+
+- `Shift+~` on Windows: `KeyEvent { Char('~'), SHIFT }` → `Key { Char('~'), shift: false }`
+- `Shift+~` on Unix: `KeyEvent { Char('~'), NONE }` → `Key { Char('~'), shift: false }`
+
+#### (c) BackTab special case
+
+```rust
+(KeyCode::BackTab, _) => shift = false
+```
+
+`BackTab` (`Shift+Tab`) always has `shift = false` because the `BackTab` key code itself implies shift.
+
+---
+
+## Key Parsing (`FromStr`)
+
+Human-readable key strings (used in YAML keymaps and `mod_agent!` macros) support two forms:
+
+| Form | Example | Result |
+|------|---------|--------|
+| Bare char | `"a"`, `"A"`, `"/"` | `Key { code: Char('a'), shift: false }` / `Key { code: Char('A'), shift: true }` |
+| Angle bracket | `"<C-S-x>"`, `"<A-b>"`, `"<Enter>"` | `Key { code: Char('x'), ctrl: true, shift: true }` |
+
+Modifier prefixes (case-insensitive): `S-` (shift), `C-` (ctrl), `A-` (alt), `D-` (super/desktop).
+
+Named keys: `Space`, `Backspace`, `Enter`, `Left`, `Right`, `Up`, `Down`, `Home`, `End`, `PageUp`, `PageDown`, `Tab`, `BackTab`, `Delete`, `Insert`, `Esc`.
+
+## Key Display (`Display`)
+
+Renders keys back to human-readable form:
+
+- `Key { code: Char('a'), shift: false }` → `"a"`
+- `Key { code: Char('A'), shift: true }` → `"A"`
+- `Key { code: Char(' '), shift: false }` → `"<Space>"`
+- `Key { code: Char('x'), ctrl: true, shift: true }` → `"<C-S-x>"`
+- `Key { code: Enter }` → `"<Enter>"`
+
+Modifier ordering: `D-` → `C-` → `A-` → `S-`.
+
+---
+
+## Comparison: demotui vs Yazi
+
+### Identical
+
+| Aspect | Both |
+|--------|------|
+| Key struct | `{ code: KeyCode, shift, ctrl, alt, super_ }` — flat booleans |
+| Shift inference | Derived from `c.is_ascii_uppercase()`, not from KeyModifiers |
+| Non-alpha shift stripping | SHIFT stripped from non-alphabetic chars (`~`, `!`, etc.) |
+| CSI u probing | Query `\x1b[?u` and enable DISAMBIGUATE + ALTERNATE_KEYS flags |
+| Key parsing | Angle bracket syntax: `<C-S-x>`, `<A-b>`, `<D-Enter>` |
+| Key display | Bare chars for plain keys, `<C-S-x>` for modified keys |
+| BackTab handling | Always `shift = false` |
+
+### Differences
+
+| Aspect | demotui | Yazi |
+|--------|---------|------|
+| Terminal detection | CSI u probing only | Full emulator detection: 26 terminal brands via CSI DA1 + env vars (`brand.rs`) |
+| Tmux support | None | Tmux passthrough mode detection and escape wrapping (`mux.rs`) |
+| CSI u probing method | Simple: write query, sleep 50ms, read stdin | Integrated into multi-query `Emulator::read_until_da1()` alongside cursor shape, blink, and device attribute queries |
+| `Key::plain()` | `pub fn plain(&self) -> Option<char>` — returns char only if no ctrl/alt/super modifiers | No equivalent |
+| Named F-keys in Display | Only `F(1)` via the catch-all `_ => "Unknown"` | Explicitly names `F(1)` through `F(19)` |
+| Event acquisition | `crossterm::EventStream` via `futures_lite::StreamExt` | Custom `Signals` task with `tokio::sync::mpsc::unbounded_channel` |
+| Resize handling | Atomic flag (`RESIZE.store(true, ...)`) checked at top of next frame | Direct repaint on resize event |
+| Key routing | Six-layer dispatch: PopUp → GlobalChord → Help → Chord → Tab → Global | Layer system: Which → Cmp → Help → Confirm → Input → Pick → Spot → Tasks → Mgr |
+
+### Rationale for demotui's simpler approach
+
+Demotui targets users who run clash-based proxy management, typically on desktop Linux/macOS with a single terminal emulator. Full terminal brand detection (26 brands) and tmux passthrough are unnecessary complexity for this use case. The two-layer approach (CSI u probing + application normalization) covers the most common cross-platform key discrepancies without the maintenance burden of a full emulator detection system.
+
+---
+
+## Files
+
+| File | Role |
+|------|------|
+| `src/tui.rs` | CSI u probing in `init()`, flag teardown in `restore()` |
+| `src/tui/key.rs` | `Key` struct, `From<KeyEvent>`, `FromStr`, `Display`, `plain()` |
+| `src/tui/app.rs` | Event loop: `KeyEvent` → `Key::from()` → six-layer dispatch |
+
+## Test Coverage
+
+`src/tui/key.rs` contains 10 unit tests covering:
+- Plain chars, uppercase chars, ctrl-modified keys
+- Non-alpha shift stripping on both Windows-style and Unix-style inputs
+- Shift-digit normalization (`Shift+1` → `!`)
+- BackTab, non-char keys with shift
+- All normalization produces identical `Key` values across simulated platform differences

@@ -1,10 +1,44 @@
 use super::super::dev::*;
 use crate::functions::restful::proxies::{self};
+use crate::tui::widget::fzffind::{FzfFind, FzfItem};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use super::content::Proxies;
 use super::tree::NodeType;
+
+struct ProxyFzfItem {
+    name: String,
+    idx: usize,
+}
+
+impl FzfItem for ProxyFzfItem {
+    fn display(&self) -> &str {
+        &self.name
+    }
+}
+
+impl Proxies {
+    pub fn fzf_find(&mut self, items: Vec<(String, usize)>, task_set: &mut FutureSet<Self>) {
+        let fzf_items: Vec<ProxyFzfItem> = items
+            .into_iter()
+            .map(|(name, idx)| ProxyFzfItem { name, idx })
+            .collect();
+        async move {
+            let selected = tri!(
+                FzfFind::new(fzf_items)
+                    .with_title("Find Proxy".to_owned())
+                    .build_and_send()
+                    .await,
+                or_cancel
+            );
+            wrapper(move |content: &mut Self| {
+                content.jump_target.set(selected);
+            })
+        }
+        .spawn_at(task_set);
+    }
+}
 
 impl Proxies {
     pub fn select_inline(
