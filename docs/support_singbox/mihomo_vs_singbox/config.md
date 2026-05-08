@@ -250,3 +250,69 @@ sing-box (requires external `.srs` rule set, no native regex support in clash_ap
 # workaround: use domain_suffix ".github.com" which is functionally equivalent
 { "domain_suffix": ["github.com"], "outbound": "direct" }
 ```
+
+---
+
+## 5. Field Ownership (Basic vs Profile)
+
+### Concept
+
+Config is split into two layers at merge time:
+
+| Layer   | Source                    | Semantics                             |
+| ------- | ------------------------- | ------------------------------------- |
+| Basic   | `basic_*_config` in demotui | System preferences, managed via Settings tab |
+| Profile | Downloaded subscription    | Proxy nodes, groups, rules — managed by profile select/update |
+
+During profile **enter**, profile content is merged onto basic config: **basic fields always win** (overwrite profile), except sequences which are **concatenated** (basic first, then profile appended).
+
+### mihomo
+
+**Profile fields** (all other fields are Basic):
+
+| Profile field     | mihomo YAML key       | Purpose                              |
+| ----------------- | --------------------- | ------------------------------------ |
+| Proxy nodes       | `proxies`             | Individual proxy node definitions     |
+| Proxy groups      | `proxy-groups`        | Selector / url-test / etc. groups     |
+| Proxy providers   | `proxy-providers`     | Remote proxy node sources             |
+| Rules             | `rules`               | Inline routing rules                  |
+| Rule providers    | `rule-providers`      | Remote rule set sources               |
+| Sub-rules         | `sub-rules`           | Nested / imported rule presets        |
+
+**Basic fields** (everything else at top-level YAML):
+
+`external-controller`, `mixed-port`, `mode`, `tun`, `log-level`, `allow-lan`, `ipv6`, `dns`, `sniffer`, `hosts`, `secret`, `profile`, `geodata-mode`, `find-process-mode`, `tcp-concurrent`, `unified-delay`, `keep-alive-interval`, etc.
+
+Basic fields are stored in `basic_clash_config.yaml` and merged on top of any profile during `select()`.
+
+### sing-box
+
+**Profile fields** (all other fields are Basic):
+
+| Profile field     | sing-box JSON path         | Purpose                              |
+| ----------------- | -------------------------- | ------------------------------------ |
+| Outbounds         | `outbounds[]`              | Proxy nodes + proxy groups (selector/urltest) — flat list |
+| Route rules       | `route.rules[]`            | Inline routing rules                  |
+| Route rule sets   | `route.rule_set[]`         | Remote `.srs` rule set references    |
+
+Note: sing-box has **no** proxy-provider, sub-rules, or rule-provider concepts. All proxy nodes and groups live together in a flat `outbounds[]` sequence, identified by their `tag`.
+
+**Basic fields** (everything else):
+
+| Field             | sing-box JSON path              | Notes                              |
+| ----------------- | ------------------------------- | ---------------------------------- |
+| Clash API         | `experimental.clash_api`        | `external_controller`, `secret`    |
+| Inbounds          | `inbounds[]`                    | mixed / tun / tun gateway entries  |
+| Logging           | `log`                           | `log.level`                        |
+| DNS               | `dns`                           | DNS servers, rules, etc.           |
+| Route config      | `route` (minus `rules`/`rule_set`) | `route.auto_detect_interface`, `route.final`, etc. |
+| Domain strategy   | `domain_strategy`               | DNS resolution strategy             |
+
+### Merge Behavior Summary
+
+| Rule                                              | mihomo            | sing-box           |
+| ------------------------------------------------- | ----------------- | ------------------ |
+| Basic overwrites profile (scalar/mapping fields)    | Yes               | Yes                |
+| Sequences concatenate (basic + profile)            | Yes (`rules`, etc.) | Yes (`outbounds`, `route.rules`, `route.rule_set`) |
+| Profile fields NOT in basic are preserved as-is    | Yes               | Yes                |
+| Basic fields NOT in profile are added              | Yes               | Yes                |

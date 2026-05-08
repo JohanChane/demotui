@@ -4,6 +4,7 @@ pub mod defs {
     pub const CONFIG_FILE: &str = "config.yaml";
     pub const DATA_FILE: &str = "clashtui.db";
     pub const BASIC_FILE: &str = "basic_clash_config.yaml";
+    pub const BASIC_SINGBOX_FILE: &str = "basic_singbox_config.json";
     pub const LOG_FILE: &str = "clashtui.log";
     #[cfg(feature = "customized-theme")]
     pub const THEME_FILE: &str = "theme.yaml";

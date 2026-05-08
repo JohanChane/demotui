@@ -224,7 +224,7 @@ pub async fn select(profile: Profile) -> anyhow::Result<()> {
     use super::template::{fetch_net_resource_statuses, update_profile_without_pp};
 
     if profile.dtype == ProfileType::Singbox {
-        todo!("sing-box config generation not yet implemented");
+        return select_singbox(profile).await;
     }
 
     let cfg = &crate::config::CONFIG.cfg_file.basic;
@@ -271,6 +271,88 @@ fn rewrite_provider_paths(content: Option<&mut serde_yml::Mapping>) {
             let Some(rel) = path_val.as_str() else { continue };
             let abs_path = cache.join(rel);
             *path_val = serde_yml::Value::String(abs_path.display().to_string());
+        }
+    }
+}
+
+async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
+    let path = super::PROFILE_JSONS_PATH.join(format!("{}.json", &profile.name));
+    anyhow::ensure!(
+        path.exists(),
+        "Profile {} file not found: {}. Download it first.",
+        profile.name, path.display()
+    );
+
+    let mut content: serde_json::Value = {
+        let file = std::fs::File::open(&path)?;
+        serde_json::from_reader(file)
+            .map_err(|e| anyhow::anyhow!("Failed to read profile JSON: {e}"))?
+    };
+
+    if let Ok(basic) = crate::config::load_basic_singbox() {
+        merge_singbox_json(&mut content, &basic);
+    }
+
+    let out_path = std::path::absolute(std::path::PathBuf::from(
+        &crate::config::CONFIG.cfg_file.singbox.singbox_config_path,
+    ))
+    .map_err(|e| anyhow::anyhow!("Failed to resolve singbox config path: {e}"))?;
+
+    if let Some(parent) = out_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let file = std::fs::File::create(&out_path)?;
+    serde_json::to_writer(file, &content)?;
+
+    db::set_current(profile)?;
+    crate::functions::restful::config::reload(&out_path.display().to_string())
+        .map_err(|e| anyhow::anyhow!("Config written but reload failed: {e}"))?;
+    Ok(())
+}
+
+fn merge_singbox_json(target: &mut serde_json::Value, source: &serde_json::Value) {
+    let serde_json::Value::Object(t) = target else { return };
+    let serde_json::Value::Object(s) = source else { return };
+    for (key, src_val) in s.iter() {
+        match t.get_mut(key) {
+            Some(serde_json::Value::Array(t_arr)) if src_val.is_array() => {
+                let mut combined: Vec<serde_json::Value> =
+                    src_val.as_array().unwrap().clone();
+                combined.append(t_arr);
+                *t_arr = combined;
+            }
+            Some(serde_json::Value::Object(_)) if src_val.is_object() => {
+                if let Some(serde_json::Value::Object(t_obj)) = t.get_mut(key) {
+                    merge_singbox_json_obj(t_obj, src_val.as_object().unwrap());
+                }
+            }
+            _ => {
+                t.insert(key.clone(), src_val.clone());
+            }
+        }
+    }
+}
+
+fn merge_singbox_json_obj(
+    target: &mut serde_json::Map<String, serde_json::Value>,
+    source: &serde_json::Map<String, serde_json::Value>,
+) {
+    for (key, src_val) in source.iter() {
+        match target.get_mut(key) {
+            Some(serde_json::Value::Array(t_arr)) if src_val.is_array() => {
+                let mut combined: Vec<serde_json::Value> =
+                    src_val.as_array().unwrap().clone();
+                combined.append(t_arr);
+                *t_arr = combined;
+            }
+            Some(serde_json::Value::Object(_)) if src_val.is_object() => {
+                if let Some(serde_json::Value::Object(t_obj)) = target.get_mut(key) {
+                    merge_singbox_json_obj(t_obj, src_val.as_object().unwrap());
+                }
+            }
+            _ => {
+                target.insert(key.clone(), src_val.clone());
+            }
         }
     }
 }
