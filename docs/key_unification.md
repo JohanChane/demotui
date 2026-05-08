@@ -10,26 +10,44 @@ Two complementary mechanisms ensure that the same physical key press produces th
 
 | Layer | Mechanism | When |
 |-------|-----------|------|
-| Terminal protocol | CSI u (kitty keyboard protocol) probing | `tui::init()`, before event loop |
+| Terminal protocol | CSI u (kitty keyboard protocol) probing | `term::setup()`, during `tui::init()` |
 | Application code | `Key::from(KeyEvent)` normalization | Every key press, in the event loop |
+
+### Terminal Lifecycle Module (`src/tui/term.rs`)
+
+Mimics Yazi's `yazi-fm/src/term.rs` — full terminal suspend/resume for external processes:
+
+| Function | Teardown order | Rebuild order |
+|----------|---------------|---------------|
+| `suspend()` | `\x1b[=0u` (disable CSI u) → `raw_mode::restore()` → show cursor | — |
+| `resume()` | — | `raw_mode::setup()` → `\x1b[=5u` (re-enable CSI u) → panic hook |
+| `setup()` | — | `raw_mode::setup()` → probe → `\x1b[=5u` → panic hook |
+| `teardown()` | clear `CSI_U_ENABLED` → `\x1b[=0u` → `raw_mode::restore()` | — |
+| `hold()` | `raw_mode::restore()` | `raw_mode::setup()` |
+
+`raw_mode::setup()` / `raw_mode::restore()` (in `src/tui/utils.rs`) handle only raw mode + alternate screen — **no keyboard enhancement** (CSI u is managed exclusively by `term.rs`).
 
 ---
 
 ## Layer 1: CSI u Keyboard Enhancement
 
-### Probing (`src/tui.rs:27-37`)
+### Probing (`src/tui/term.rs:8-23`)
 
-During `tui::init()`, after `raw_mode::setup()`:
+During `term::setup()`, after `raw_mode::setup()`:
 
 1. Write the CSI u query `\x1b[?u` to stdout and flush
 2. Sleep 50ms to allow the terminal to respond
 3. Read raw bytes from stdin (up to 32 bytes)
-4. Check if the response contains `\x1b[?0u` — this means the terminal supports the kitty keyboard protocol
-5. If supported, push `KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES | REPORT_ALTERNATE_KEYS`
+4. Check if the response contains `\x1b[?0u` — this means the terminal responds to CSI u queries
+5. If supported, write `\x1b[=5u` to enable `DISAMBIGUATE_ESCAPE_CODES | REPORT_ALTERNATE_KEYS`
 
-### Teardown (`src/tui.rs:41-44`)
+The `=` command uses **absolute set** (not crossterm's stack-based Push/Pop). All kitty-protocol terminals support `=`, but some ignore the optional stack `>`/`<` commands. This avoids the bug where `PopKeyboardEnhancementFlags` (`\x1b[<1u`) is silently ignored, leaving CSI u escape sequences leaking into subprocess stdin.
 
-On `restore()`, if CSI u was enabled, pop the keyboard enhancement flags before restoring raw mode.
+### Teardown (`src/tui/term.rs:45-49`)
+
+`teardown()`: clear `CSI_U_ENABLED` → `\x1b[=0u` → `raw_mode::restore()`.
+
+`suspend()` (for external processes): `\x1b[=0u` → `raw_mode::restore()` → show cursor. Does NOT clear `CSI_U_ENABLED` — the flag persists so `resume()` knows to re-enable.
 
 ### What CSI u provides
 
@@ -166,9 +184,12 @@ Demotui targets users who run clash-based proxy management, typically on desktop
 
 | File | Role |
 |------|------|
-| `src/tui.rs` | CSI u probing in `init()`, flag teardown in `restore()` |
+| `src/tui/term.rs` | Terminal lifecycle: CSI u probe/enable/disable, `setup`/`teardown`/`hold`/`suspend`/`resume` |
+| `src/tui/utils.rs` | `raw_mode::setup/restore`: raw mode + alternate screen (no keyboard enhancement) |
+| `src/tui.rs` | Module graph, `TuiWidget` trait, `EXT_PROC` flag, delegates to `term` |
 | `src/tui/key.rs` | `Key` struct, `From<KeyEvent>`, `FromStr`, `Display`, `plain()` |
 | `src/tui/app.rs` | Event loop: `KeyEvent` → `Key::from()` → six-layer dispatch |
+| `src/tui/widget/fzffind.rs` | `run_fzf()`: external fzf subprocess wrapper |
 
 ## External Fzf Integration
 
@@ -184,12 +205,17 @@ pub fn run_fzf(items: &[String], prompt: &str) -> Option<usize>
 
 Flow:
 1. `crate::tui::EXT_PROC` atomic flag is set → prevents event loop rendering
-2. `crate::tui::hold(true)` → exits raw mode, restoring terminal to normal
+2. `crate::tui::suspend_terminal()` → `term::suspend()`:
+   - `\x1b[=0u` disables CSI u (absolute set, works on all terminals)
+   - `raw_mode::restore()` exits raw mode + leaves alternate screen + shows cursor
 3. `fzf` is spawned with `--delimiter='\t' --with-nth=2`:
    - Input lines: `{index}\t{display_name}` — fzf displays only `display_name`
    - Output: the full line — first tab-delimited field is the selected index
-4. On completion: `hold(false)` → re-enters raw mode, `EXT_PROC` cleared
-5. `FULL_RENDER` notified for full terminal redraw
+4. On completion: `crate::tui::resume_terminal()` → `term::resume()`:
+   - `raw_mode::setup()` re-enters raw mode + alternate screen
+   - `\x1b[=5u` re-enables CSI u (only if `CSI_U_ENABLED` flag was set)
+   - Resets panic hook
+5. `EXT_PROC` cleared, `FULL_RENDER` notified for full terminal redraw
 
 ### Call sites
 
@@ -206,7 +232,7 @@ All call sites use `tokio::task::spawn_blocking` to offload the synchronous fzf 
 | Aspect | demotui | Yazi |
 |--------|---------|------|
 | Invocation | `std::process::Command::new("fzf")` | `Command("fzf")` via Lua plugin |
-| Terminal mode | Exits raw mode before fzf, re-enters after | fzf inherits terminal, sets up own state |
+| Terminal mode | Full suspend/resume: disable CSI u, leave alt screen, exit raw mode; rebuild on resume | `Term::stop()` → fzf → `Term::start()`: full teardown/rebuild |
 | Input format | `{idx}\t{name}` with `--with-nth=2` | File paths, one per line |
 | Output parsing | Parse `\t`-delimited first field as index | Parse selected file path directly |
 | Selection mapping | Index mapped to content item position | Path matched back to file entry |
