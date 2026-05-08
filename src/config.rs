@@ -79,14 +79,37 @@ impl Config {
             .display()
             .to_string();
         }
-        let singbox_controller = {
-            let host = cfg_file
-                .singbox
-                .singbox_config_dir
-                .strip_prefix("/")
-                .unwrap_or(&cfg_file.singbox.singbox_config_dir)
-                .to_string();
-            format!("http://{host}:9090")
+        let (singbox_controller, singbox_secret) = {
+            let mut secret = None;
+            let controller = load_basic_singbox()
+                .ok()
+                .and_then(|v| {
+                    let controller = v
+                        .get("experimental")?
+                        .get("clash_api")?
+                        .get("external_controller")?
+                        .as_str()?
+                        .to_owned();
+                    secret = v
+                        .get("experimental")
+                        .and_then(|e| e.get("clash_api"))
+                        .and_then(|c| c.get("secret"))
+                        .and_then(|s| s.as_str())
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_owned());
+                    if let Some(stripped) = controller.strip_prefix("http://") {
+                        Some(stripped.to_owned())
+                    } else {
+                        Some(controller)
+                    }
+                })
+                .unwrap_or_else(|| "127.0.0.1:9090".to_owned());
+            let url = if controller.starts_with("http") {
+                controller
+            } else {
+                format!("http://{controller}")
+            };
+            (url, secret)
         };
         Ok(Self {
             cfg_file,
@@ -98,7 +121,7 @@ impl Config {
             secret: basic_info.secret,
             global_ua: basic_info.global_ua,
             singbox_external_controller: singbox_controller,
-            singbox_secret: None,
+            singbox_secret,
         })
     }
     pub fn save(&self) -> Result<()> {
@@ -166,6 +189,10 @@ pub fn init_config() -> Result<()> {
     fs::create_dir_all(&singbox)?;
 
     fs::write(mihomo.join(defs::BASIC_FILE), BasicInfo::DEFAULT)?;
+    fs::write(
+        singbox.join(defs::BASIC_SINGBOX_FILE),
+        DEFAULT_SINGBOX_BASIC_CONFIG,
+    )?;
     ConfigFile::default().to_file()?;
     ProfileManager::default().to_file()?;
 
@@ -215,6 +242,29 @@ pub fn load_basic() -> anyhow::Result<serde_yml::Mapping> {
     let fp = std::fs::File::open(mihomo_dir().join(defs::BASIC_FILE))?;
     serde_yml::from_reader(fp).map_err(|e| e.into())
 }
+pub fn load_basic_singbox() -> anyhow::Result<serde_json::Value> {
+    let fp = std::fs::File::open(singbox_dir().join(defs::BASIC_SINGBOX_FILE))?;
+    serde_json::from_reader(fp).map_err(|e| e.into())
+}
+pub const DEFAULT_SINGBOX_BASIC_CONFIG: &str = r#"{
+  "experimental": {
+    "clash_api": {
+      "external_controller": "127.0.0.1:9090",
+      "secret": ""
+    }
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "::",
+      "listen_port": 7890
+    }
+  ],
+  "log": {
+    "level": "info"
+  }
+}"#;
 pub fn keymap_path() -> PathBuf {
     DATA_DIR.get().unwrap().join(defs::KEYMAP_FILE)
 }
