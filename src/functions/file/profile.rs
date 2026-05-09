@@ -390,8 +390,14 @@ async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
     serde_json::to_writer(file, &content)?;
 
     db::set_current(profile)?;
-    crate::functions::restful::config::reload(&out_path.display().to_string())
-        .map_err(|e| anyhow::anyhow!("Config written but reload failed: {e}"))?;
+    let restart_out = crate::functions::command::restart_core_service(
+        None,
+        crate::config::CoreType::Singbox,
+    )
+    .map_err(|e| anyhow::anyhow!("Config written but service restart failed: {e}"))?;
+    if restart_out.starts_with("Error") {
+        return Err(anyhow::anyhow!("Service restart failed:\n{restart_out}"));
+    }
     Ok(())
 }
 
