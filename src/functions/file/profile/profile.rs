@@ -7,7 +7,9 @@ impl Profile {
     pub fn load_local_profile(self) -> anyhow::Result<LocalProfile> {
         use super::super::PROFILE_JSONS_PATH;
         use super::PROFILE_YAMLS_PATH;
-        let path = if super::is_singbox_profile(&self) {
+        let path = if matches!(self.dtype, ProfileType::Singbox)
+            || crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox
+        {
             PROFILE_JSONS_PATH.join(format!("{}.json", &self.name))
         } else {
             PROFILE_YAMLS_PATH.join(format!("{}.yaml", &self.name))

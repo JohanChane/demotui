@@ -4,10 +4,6 @@ use super::PROFILE_YAMLS_PATH;
 use super::PROFILE_JSONS_PATH;
 use crate::config::database::{Profile, ProfileType};
 
-fn is_singbox_profile(pf: &Profile) -> bool {
-    pm!().contains_in_singbox(&pf.name)
-}
-
 pub mod db {
     use super::*;
 
@@ -18,16 +14,16 @@ pub mod db {
         Ok(pm.get(name).unwrap())
     }
     pub fn remove(pf: Profile) -> anyhow::Result<()> {
-        let file_to_remove = if is_singbox_profile(&pf) {
-            PROFILE_JSONS_PATH.join(format!("{}.json", &pf.name))
-        } else {
-            PROFILE_YAMLS_PATH.join(format!("{}.yaml", &pf.name))
-        };
-        if let Err(e) = std::fs::remove_file(&file_to_remove) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                log::warn!("Failed to Remove profile file: {e}")
+        for path in [
+            PROFILE_JSONS_PATH.join(format!("{}.json", &pf.name)),
+            PROFILE_YAMLS_PATH.join(format!("{}.yaml", &pf.name)),
+        ] {
+            if let Err(e) = std::fs::remove_file(&path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    log::warn!("Failed to Remove profile file {}: {e}", path.display());
+                }
             }
-        };
+        }
         let mut pm = pm!();
         pm.remove(pf.name);
         pm.to_file()
@@ -146,7 +142,10 @@ pub async fn update_profile(
         return update_template_profile(profile, with_proxy).await;
     }
 
-    if is_singbox_profile(&profile) {
+    // sing-box local imports always use JSON; URL profiles follow current core type
+    if matches!(profile.dtype, ProfileType::Singbox)
+        || crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox
+    {
         return update_singbox_profile(profile, with_proxy).await;
     }
 
@@ -240,7 +239,7 @@ async fn update_template_profile(
         _ => anyhow::bail!("update_template_profile called on non-Template profile"),
     };
 
-    let is_singbox = is_singbox_profile(&profile);
+    let is_singbox = crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox;
     let mut statuses: Vec<NetResourceUpdate> = Vec::new();
 
     if is_singbox {
@@ -278,7 +277,9 @@ async fn update_template_profile(
 pub async fn select(profile: Profile) -> anyhow::Result<()> {
     use super::template::{fetch_net_resource_statuses, update_profile_without_pp};
 
-    if is_singbox_profile(&profile) {
+    if matches!(profile.dtype, ProfileType::Singbox)
+        || crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox
+    {
         return select_singbox(profile).await;
     }
 
