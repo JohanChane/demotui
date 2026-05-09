@@ -234,8 +234,8 @@ async fn update_template_profile(
 ) -> anyhow::Result<UpdateResult> {
     use crate::functions::file::net_resource::{NetResourceUpdate, ResourceSection};
 
-    let (template, urls) = match &profile.dtype {
-        ProfileType::Template { template, proxy_provider_urls } => (template.clone(), proxy_provider_urls.clone()),
+    let (template, groups) = match &profile.dtype {
+        ProfileType::Template { template, proxy_provider_groups } => (template.clone(), proxy_provider_groups.clone()),
         _ => anyhow::bail!("update_template_profile called on non-Template profile"),
     };
 
@@ -243,20 +243,22 @@ async fn update_template_profile(
     let mut statuses: Vec<NetResourceUpdate> = Vec::new();
 
     if is_singbox {
-        super::template::apply_template_singbox(&template, &profile.name, &urls, with_proxy).await?;
-        for url in &urls {
-            let domain = extract_domain(url).unwrap_or("unknown");
-            statuses.push(NetResourceUpdate {
-                name: "subscription".into(),
-                url: url.clone(),
-                path: String::new(),
-                section: ResourceSection::ProxyProvider,
-                ok: true,
-                error: None,
-            });
+        super::template::apply_template_singbox(&template, &profile.name, &groups, with_proxy).await?;
+        for (_, providers) in &groups {
+            for pv in providers {
+                let domain = extract_domain(&pv.url).unwrap_or("unknown");
+                statuses.push(NetResourceUpdate {
+                    name: pv.name.clone(),
+                    url: pv.url.clone(),
+                    path: String::new(),
+                    section: ResourceSection::ProxyProvider,
+                    ok: true,
+                    error: None,
+                });
+            }
         }
     } else {
-        super::template::apply_template(&template, &profile.name, &urls)?;
+        super::template::apply_template(&template, &profile.name, &groups)?;
         let path = PROFILE_YAMLS_PATH.join(format!("{}.yaml", &profile.name));
         if path.exists() {
             let content: serde_yml::Mapping = {

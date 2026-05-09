@@ -1,6 +1,8 @@
 use anyhow::Context;
 use serde_json::Value as JsonValue;
 
+use crate::config::database::ProxyProviderGroups;
+
 use super::{PROXY_GROUPS, PROXY_PROVIDERS};
 
 fn interval_to_duration(seconds: u64) -> String {
@@ -98,14 +100,14 @@ fn download_subscription(url: &str, with_proxy: bool) -> anyhow::Result<Vec<Json
 /// Expand a sing-box JSON template into a complete sing-box JSON config.
 ///
 /// The template is a sing-box-style JSON object with extra template markers:
-/// - `"tpl_param": {}` on proxy-provider objects marks them for URL expansion
-/// - `"tpl_param": {"providers": ["pvd"]}` on proxy-groups marks groups for expansion
-/// - `"<name>"` placeholders in `"outbounds"` or `"use"` lists
+/// - `"tpl_param": {}` on proxy-provider objects marks them for expansion
+/// - `"expand_this_outbounds_with": ["${pvd}"]` on outbounds marks groups for expansion
+/// - `"${name}"` placeholders in `"outbounds"` lists
 /// - `"rules"` as inline string array (mihomo-style, translated to sing-box)
 pub async fn gen_template_singbox(
     tpl: &JsonValue,
     template_name: &str,
-    urls: &[String],
+    groups: &ProxyProviderGroups,
     with_proxy: bool,
 ) -> anyhow::Result<JsonValue> {
     use std::collections::HashMap;
@@ -118,12 +120,14 @@ pub async fn gen_template_singbox(
     // --- Download subscription URLs → proxy nodes ---
     let mut provider_proxies: HashMap<String, Vec<JsonValue>> = HashMap::new();
     let mut download_handles = Vec::new();
-    for (i, url) in urls.iter().enumerate() {
-        let url = url.clone();
-        let pp_name = format!("pvd{i}");
-        download_handles.push(tokio::task::spawn_blocking(move || {
-            (pp_name, download_subscription(&url, with_proxy))
-        }));
+    for (group_name, providers) in groups {
+        for pv in providers {
+            let url = pv.url.clone();
+            let pp_name = pv.name.clone();
+            download_handles.push(tokio::task::spawn_blocking(move || {
+                (pp_name, download_subscription(&url, with_proxy))
+            }));
+        }
     }
     for handle in download_handles {
         let (pp_name, result) = handle.await?;
@@ -181,10 +185,9 @@ pub async fn gen_template_singbox(
     let mut pg_names: HashMap<String, Vec<String>> = HashMap::new();
 
     for the_pg_value in pg_sequence {
-        // tpl_param can be null or an object with "providers"
-        let has_tpl_param = the_pg_value.get("tpl_param").is_some_and(|v| !v.is_null());
+        let has_expand = the_pg_value.get("expand_this_outbounds_with").is_some();
 
-        if !has_tpl_param {
+        if !has_expand {
             // Passthrough group
             let name = the_pg_value
                 .get("name")
@@ -212,8 +215,8 @@ pub async fn gen_template_singbox(
                     let mut resolved: Vec<String> = Vec::new();
                     for u in use_seq {
                         let u_str = u.as_str().unwrap_or("");
-                        if u_str.starts_with('<') && u_str.ends_with('>') {
-                            let key = u_str.trim_matches(|c| c == '<' || c == '>');
+                        if u_str.starts_with("${") && u_str.ends_with('}') {
+                            let key = &u_str[2..u_str.len()-1];
                             if let Some(tags) = pp_tags.get(key) {
                                 resolved.extend(tags.clone());
                             }
@@ -230,8 +233,8 @@ pub async fn gen_template_singbox(
                     let mut resolved: Vec<String> = Vec::new();
                     for p in proxy_seq {
                         let p_str = p.as_str().unwrap_or("");
-                        if p_str.starts_with('<') && p_str.ends_with('>') {
-                            let key = p_str.trim_matches(|c| c == '<' || c == '>');
+                        if p_str.starts_with("${") && p_str.ends_with('}') {
+                            let key = &p_str[2..p_str.len()-1];
                             if let Some(names) = pg_names.get(key) {
                                 resolved.extend(names.clone());
                             }
@@ -258,7 +261,7 @@ pub async fn gen_template_singbox(
             continue;
         }
 
-        // Template group — expand via tpl_param.providers
+        // Template group — expand via expand_this_outbounds_with
         let pg_type = the_pg_value
             .get("type")
             .and_then(|v| v.as_str())
@@ -271,23 +274,34 @@ pub async fn gen_template_singbox(
             _ => "selector",
         };
 
-        let provider_keys = the_pg_value["tpl_param"]
-            .get("providers")
-            .and_then(|v| v.as_array())
-            .context("tpl_param.providers must be an array")?;
+        let expand_keys = the_pg_value["expand_this_outbounds_with"]
+            .as_array()
+            .context("expand_this_outbounds_with must be an array")?;
 
         let group_name = the_pg_value
             .get("name")
             .and_then(|v| v.as_str())
             .context("proxy-group must have a name")?;
 
-        for the_provider_key in provider_keys {
-            let pk_str = the_provider_key
+        for the_expand_key in expand_keys {
+            let pk_str = the_expand_key
                 .as_str()
-                .context("provider key in tpl_param.providers must be a string")?;
+                .context("expand_this_outbounds_with entries must be strings")?;
+            // Parse ${group_name} from the expand key
+            let pk_str = if pk_str.starts_with("${") && pk_str.ends_with('}') {
+                &pk_str[2..pk_str.len()-1]
+            } else {
+                pk_str
+            };
 
             for (pp_name, tags) in &pp_tags {
-                if !pp_name.starts_with(pk_str) {
+                // Match if pp_name starts with the group key
+                // For groups, we match all providers that belong to this group
+                let group_pp_names: Vec<&str> = groups
+                    .get(pk_str)
+                    .map(|providers| providers.iter().map(|p| p.name.as_str()).collect())
+                    .unwrap_or_default();
+                if !group_pp_names.contains(&pp_name.as_str()) {
                     continue;
                 }
 

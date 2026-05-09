@@ -1,13 +1,14 @@
 # Profile Template (Unified — mihomo + sing-box)
 
-Templates let you define a parameterized configuration that expands into a full profile. Mihomo templates are **YAML** files; sing-box templates are **JSON** files. Both use the same `tpl_param` marker and `<>` placeholder syntax. Subscription URLs are stored per-profile in the database.
+Templates let you define a parameterized configuration that expands into a full profile. Mihomo templates are **YAML** files; sing-box templates are **JSON** files. Both use the same `${}` placeholder syntax and `expand_this_group_with` / `expand_this_outbounds_with` markers. Subscription proxy-provider groups are stored per-profile in the database as name+URL pairs.
 
 ## Overview
 
 A template has two extra features on top of the native config format:
 
-1. **`tpl_param`** markers on proxy-provider and proxy-group entries — these entries expand at generation time
-2. **`<>`** angle-bracket placeholders in `use`/`proxies`/`outbounds` lists — expand to all generated names
+1. **`tpl_param`** markers on proxy-provider entries (unchanged) — marks entries for expansion
+2. **`expand_this_group_with`** (mihomo) / **`expand_this_outbounds_with`** (sing-box) on proxy-group entries — marks groups for expansion with `${group_name}` references
+3. **`${name}`** placeholders in `use`/`proxies`/`outbounds` lists — expand to all generated names matching that prefix
 
 ### Template Formats
 
@@ -29,7 +30,7 @@ A template has two extra features on top of the native config format:
 |------|-------------|
 | `File` | Local file imported |
 | `Url(url)` | Downloaded subscription |
-| `Template { template, urls }` | Generated from template with per-profile URLs |
+| `Template { template, proxy_provider_groups }` | Generated from template with per-profile provider groups |
 | `Singbox` | sing-box JSON profile imported directly |
 
 Legacy `!Generated` entries auto-migrate to `!Template` on load. Legacy `!File` entries with `clashtui` marker auto-migrate to `!Template`.
@@ -68,12 +69,11 @@ proxy-groups:
     type: select
     proxies:
       - DIRECT
-      - <Auto>             # Placeholder — expands to all Auto-* groups
+      - ${Auto}            # Placeholder — expands to all Auto-* groups
   - name: Auto             # Template group
     type: url-test
-    tpl_param:
-      providers:
-        - pvd
+    expand_this_group_with:
+      - ${pvd}
     url: https://www.gstatic.com/generate_204
     interval: 300
   - name: Direct           # Passthrough
@@ -87,23 +87,23 @@ After generation:
 proxy-groups:
   - name: Select
     type: select
-    proxies: [DIRECT, Auto-pvd0]
-  - name: Auto-pvd0
+    proxies: [DIRECT, Auto-foo_pvd]
+  - name: Auto-foo_pvd
     type: url-test
     url: https://www.gstatic.com/generate_204
     interval: 300
-    use: [pvd0]
+    use: [foo_pvd]
   - name: Direct
     type: select
     proxies: [DIRECT]
 ```
 
-### `<>` Placeholder Expansion
+### `${}` Placeholder Expansion
 
 | Placeholder | In | Expands to |
 |-------------|-----|------------|
-| `<pvd>` | `use` | All generated provider names (`pvd0`, `pvd1`, ...) |
-| `<Auto>` | `proxies` | All generated group names (`Auto-pvd0`, `Auto-pvd1`, ...) |
+| `${pvd}` | `use` | All generated provider names in the `pvd` group (`foo_pvd`, `bar_pvd`, ...) |
+| `${Auto}` | `proxies` | All generated group names matching `Auto-*` prefix (`Auto-foo_pvd`, `Auto-bar_pvd`, ...) |
 
 ### Mihomo Complete Example
 
@@ -122,11 +122,10 @@ proxy-providers:
 proxy-groups:
   - name: Entry
     type: select
-    proxies: [DIRECT, <Auto>, REJECT]
+    proxies: [DIRECT, ${Auto}, REJECT]
   - name: Auto
     type: url-test
-    tpl_param:
-      providers: [pvd]
+    expand_this_group_with: [${pvd}]
     url: https://www.gstatic.com/generate_204
     interval: 300
   - name: Direct
@@ -140,7 +139,7 @@ rules:
 **Output** `profile_yamls/my-config.yaml`:
 ```yaml
 proxy-providers:
-  pvd0:
+  foo_pvd:
     type: http
     interval: 3600
     url: https://example.com/sub1.yaml
@@ -148,16 +147,16 @@ proxy-providers:
       enable: true
       url: https://www.gstatic.com/generate_204
       interval: 300
-    path: proxy-providers/tpl/my-config/pvd0.yaml
+    path: proxy-providers/tpl/my-config/foo_pvd.yaml
 proxy-groups:
   - name: Entry
     type: select
-    proxies: [DIRECT, Auto-pvd0, REJECT]
-  - name: Auto-pvd0
+    proxies: [DIRECT, Auto-foo_pvd, REJECT]
+  - name: Auto-foo_pvd
     type: url-test
     url: https://www.gstatic.com/generate_204
     interval: 300
-    use: [pvd0]
+    use: [foo_pvd]
   - name: Direct
     type: select
     proxies: [DIRECT]
@@ -171,7 +170,7 @@ clashtui: null
 
 ## sing-box Template Format (JSON)
 
-sing-box templates use the same `tpl_param` / `<>` syntax, but in JSON format. The engine downloads subscriptions, extracts proxy nodes, and embeds them directly into `outbounds[]` (sing-box has no proxy-provider concept).
+sing-box templates use the same `${}` syntax but in JSON format. The engine downloads subscriptions, extracts proxy nodes, and embeds them directly into `outbounds[]` (sing-box has no proxy-provider concept).
 
 ### Template Markers (JSON)
 
@@ -187,26 +186,26 @@ sing-box templates use the same `tpl_param` / `<>` syntax, but in JSON format. T
     {
       "name": "Auto",
       "type": "url-test",
-      "tpl_param": { "providers": ["pvd"] },
+      "expand_this_outbounds_with": ["${pvd}"],
       "url": "https://www.gstatic.com/generate_204",
       "interval": 300
     },
     {
       "name": "Proxy",
       "type": "select",
-      "proxies": ["DIRECT", "<Auto>", "REJECT"]
+      "proxies": ["DIRECT", "${Auto}", "REJECT"]
     }
   ]
 }
 ```
 
-- `"tpl_param": {}` — marks a proxy-provider for URL expansion
-- `"tpl_param": { "providers": ["pvd"] }` — marks a proxy-group for expansion
-- `"<Auto>"` — placeholder, expands to all generated group tags
+- `"tpl_param": {}` — marks a proxy-provider for expansion (unchanged)
+- `"expand_this_outbounds_with": ["${pvd}"]` — marks an outbound for expansion with `${group_name}` reference
+- `"${Auto}"` — placeholder, expands to all generated group tags
 
 ### Proxy-provider naming
 
-Proxy-provider identities use hardcoded prefix `pvd` with zero-based index: `pvd0`, `pvd1`, ... Each subscription URL from the profile record becomes one provider slot.
+Proxy-provider names come from the `ProviderUrl.name` field in the proxy-provider group configured in `template_proxy_providers.yaml`. Each subscription URL from the group becomes one provider entry with the given name.
 
 ### Mapping: Template → sing-box Output
 
@@ -252,12 +251,12 @@ Rule matchers:
     {
       "name": "Proxy",
       "type": "select",
-      "proxies": ["DIRECT", "<Auto>", "REJECT"]
+      "proxies": ["DIRECT", "${Auto}", "REJECT"]
     },
     {
       "name": "Auto",
       "type": "url-test",
-      "tpl_param": { "providers": ["pvd"] },
+      "expand_this_outbounds_with": ["${pvd}"],
       "url": "https://www.gstatic.com/generate_204",
       "interval": 300
     },
@@ -292,13 +291,13 @@ Rule matchers:
 }
 ```
 
-**Output** `profile_jsons/my-config.json` (with 1 subscription URL `https://sub.example.com` containing 2 VMess nodes):
+**Output** `profile_jsons/my-config.json` (with proxy-provider group `pvd: [{name: "foo_pvd", url: "https://sub.example.com"}]` containing 2 VMess nodes):
 ```json
 {
   "outbounds": [
     {
       "type": "vmess",
-      "tag": "pvd0-1.2.3.4",
+      "tag": "foo_pvd-1.2.3.4",
       "server": "1.2.3.4",
       "server_port": 443,
       "uuid": "...",
@@ -306,7 +305,7 @@ Rule matchers:
     },
     {
       "type": "vmess",
-      "tag": "pvd0-5.6.7.8",
+      "tag": "foo_pvd-5.6.7.8",
       "server": "5.6.7.8",
       "server_port": 443,
       "uuid": "...",
@@ -315,12 +314,12 @@ Rule matchers:
     {
       "type": "selector",
       "tag": "Proxy",
-      "outbounds": ["DIRECT", "Auto-pvd0", "REJECT"]
+      "outbounds": ["DIRECT", "Auto-foo_pvd", "REJECT"]
     },
     {
       "type": "urltest",
-      "tag": "Auto-pvd0",
-      "outbounds": ["pvd0-1.2.3.4", "pvd0-5.6.7.8"],
+      "tag": "Auto-foo_pvd",
+      "outbounds": ["foo_pvd-1.2.3.4", "foo_pvd-5.6.7.8"],
       "url": "https://www.gstatic.com/generate_204",
       "interval": "5m"
     },

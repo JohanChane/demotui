@@ -16,12 +16,12 @@
     {
       "name": "Entry",
       "type": "select",
-      "proxies": ["<Auto>", "<Streaming>", "<AI>", "DIRECT", "REJECT"]
+      "proxies": ["${Auto}", "${Streaming}", "${AI}", "DIRECT", "REJECT"]
     },
     {
       "name": "Auto",
       "type": "url-test",
-      "tpl_param": { "providers": ["pvd"] },
+      "expand_this_outbounds_with": ["${pvd}"],
       "url": "https://www.gstatic.com/generate_204",
       "interval": 300,
       "tolerance": 50
@@ -29,12 +29,12 @@
     {
       "name": "Streaming",
       "type": "select",
-      "proxies": ["<StreamAuto>", "DIRECT"]
+      "proxies": ["${StreamAuto}", "DIRECT"]
     },
     {
       "name": "StreamAuto",
       "type": "url-test",
-      "tpl_param": { "providers": ["pvd"] },
+      "expand_this_outbounds_with": ["${pvd}"],
       "url": "https://cp.cloudflare.com/generate_204",
       "interval": 600,
       "tolerance": 100
@@ -42,12 +42,12 @@
     {
       "name": "AI",
       "type": "select",
-      "proxies": ["<AIAuto>", "<Auto>", "DIRECT"]
+      "proxies": ["${AIAuto}", "${Auto}", "DIRECT"]
     },
     {
       "name": "AIAuto",
       "type": "url-test",
-      "tpl_param": { "providers": ["pvd"] },
+      "expand_this_outbounds_with": ["${pvd}"],
       "url": "https://www.gstatic.com/generate_204",
       "interval": 600,
       "tolerance": 50

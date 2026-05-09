@@ -25,27 +25,25 @@ proxy-groups:
     type: select
     proxies:
       - DIRECT
-      - <Auto>
-      - <Fallback>
+      - ${Auto}
+      - ${Fallback}
   - name: Auto
     type: url-test
-    tpl_param:
-      providers:
-        - pvd
+    expand_this_group_with:
+      - ${pvd}
     url: https://www.gstatic.com/generate_204
     interval: 300
   - name: Fallback
     type: fallback
-    tpl_param:
-      providers:
-        - pvd2
+    expand_this_group_with:
+      - ${pvd2}
     url: https://www.gstatic.com/generate_204
     interval: 600
   - name: AllInOne
     type: select
     use:
-      - <pvd>
-      - <pvd2>
+      - ${pvd}
+      - ${pvd2}
     proxies:
       - DIRECT
   - name: Direct

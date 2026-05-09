@@ -16,18 +16,19 @@ pub fn get_all_templates() -> std::io::Result<Vec<String>> {
         })
         .collect())
 }
-pub fn read_template_proxy_providers() -> anyhow::Result<Vec<String>> {
+pub fn read_template_proxy_providers() -> anyhow::Result<crate::config::database::ProxyProviderGroups> {
     let path = match crate::config::CONFIG.core_type() {
         crate::config::CoreType::Mihomo => crate::config::template_proxy_providers_path(),
         crate::config::CoreType::Singbox => crate::config::singbox_template_proxy_providers_path(),
     };
     let content = std::fs::read_to_string(&path)
         .with_context(|| format!("Failed to read template_proxy_providers: {}", path.display()))?;
-    Ok(content
-        .lines()
-        .map(|l| l.trim().to_owned())
-        .filter(|l| !l.is_empty() && !l.starts_with('#'))
-        .collect())
+    if content.trim().is_empty() {
+        return Ok(crate::config::database::ProxyProviderGroups::new());
+    }
+    let groups: crate::config::database::ProxyProviderGroups = serde_yml::from_str(&content)
+        .with_context(|| format!("Failed to parse template_proxy_providers.yaml: {}", path.display()))?;
+    Ok(groups)
 }
 
 pub fn create_template(path: String) -> anyhow::Result<Option<String>> {
@@ -60,7 +61,7 @@ pub fn create_template(path: String) -> anyhow::Result<Option<String>> {
         ),
     }
 }
-pub fn apply_template(template_name: &str, profile_name: &str, urls: &[String]) -> anyhow::Result<()> {
+pub fn apply_template(template_name: &str, profile_name: &str, groups: &crate::config::database::ProxyProviderGroups) -> anyhow::Result<()> {
     let path = TEMPLATE_PATH.join(template_name);
     let file = std::fs::File::open(&path)
         .inspect_err(|e| log::error!("Founding template {template_name}:{e}"))?;
@@ -69,7 +70,7 @@ pub fn apply_template(template_name: &str, profile_name: &str, urls: &[String]) 
         .get("clashtui_template_version")
         .and_then(|v| v.as_u64())
     {
-        None | Some(1) => version1::gen_template(map, template_name, urls)?,
+        None | Some(1) => version1::gen_template(map, template_name, groups)?,
         Some(_) => unimplemented!(),
     };
     let output_path = PROFILE_YAMLS_PATH.join(format!("{profile_name}.yaml"));
@@ -83,7 +84,7 @@ pub fn apply_template(template_name: &str, profile_name: &str, urls: &[String]) 
     let mut pm = pm!();
     pm.insert(profile_name, ProfileType::Template {
         template: template_name.to_owned(),
-        proxy_provider_urls: urls.to_vec(),
+        proxy_provider_groups: groups.clone(),
     });
     pm.to_file()?;
     Ok(())
@@ -92,14 +93,14 @@ pub fn apply_template(template_name: &str, profile_name: &str, urls: &[String]) 
 pub async fn apply_template_singbox(
     template_name: &str,
     profile_name: &str,
-    urls: &[String],
+    groups: &crate::config::database::ProxyProviderGroups,
     with_proxy: bool,
 ) -> anyhow::Result<()> {
     let path = TEMPLATE_PATH.join(template_name);
     let file = std::fs::File::open(&path)
         .inspect_err(|e| log::error!("Opening template {template_name}:{e}"))?;
     let map: serde_json::Value = serde_json::from_reader(file)?;
-    let gened = singbox::gen_template_singbox(&map, template_name, urls, with_proxy).await?;
+    let gened = singbox::gen_template_singbox(&map, template_name, groups, with_proxy).await?;
     let output_path = PROFILE_JSONS_PATH.join(format!("{profile_name}.json"));
     if let Some(parent) = output_path.parent() {
         std::fs::create_dir_all(parent)?;
@@ -112,7 +113,7 @@ pub async fn apply_template_singbox(
     let mut pm = pm!();
     pm.insert(profile_name, ProfileType::Template {
         template: template_name.to_owned(),
-        proxy_provider_urls: urls.to_vec(),
+        proxy_provider_groups: groups.clone(),
     });
     pm.to_file()?;
     Ok(())
@@ -123,6 +124,24 @@ const PROXY_GROUPS: &str = "proxy-groups";
 const PROXIES: &str = "proxies";
 const RULE_PROVIDERS: &str = "rule-providers";
 const RULES: &str = "rules";
+
+fn urls_to_groups(urls: &[String]) -> crate::config::database::ProxyProviderGroups {
+    use crate::config::database::{ProviderUrl, ProxyProviderGroups};
+    let mut groups = ProxyProviderGroups::new();
+    if urls.is_empty() {
+        return groups;
+    }
+    let providers: Vec<ProviderUrl> = urls
+        .iter()
+        .enumerate()
+        .map(|(i, url)| ProviderUrl {
+            name: format!("pvd{i}"),
+            url: url.clone(),
+        })
+        .collect();
+    groups.insert("pvd".into(), providers);
+    groups
+}
 
 /// Remove net resource sections (`proxy-providers`, `rule-providers`) and embed
 /// their remote content into the profile YAML. Also saves each downloaded
