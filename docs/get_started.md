@@ -38,7 +38,7 @@ cargo run -- --config-dir ~/.config/clashtui
 ```
 ~/.config/clashtui/
 ├── config.yaml              # demotui 自身配置
-├── basic_clash_config.yaml  # Mihomo 基础配置
+├── core_override_config.yaml  # Mihomo override config
 ├── clashtui.db              # 数据文件（profiles 等）
 ├── keymap.yaml              # 自定义按键映射（可选）
 ├── theme.yaml               # 自定义主题（可选，需 customized-theme feature）

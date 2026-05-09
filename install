@@ -211,15 +211,15 @@ EOF
   esac
 
   if [ "$core_type" = "mihomo" ] || [ "$core_type" = "all" ]; then
-    echo -n "Do you want to download basic_clash_config.yaml? (y/N): "
+    echo -n "Do you want to download core_override_config.yaml? (y/N): "
     read -r response
     if [ "$response" = "y" ] || [ "$response" = "Y" ]; then
-      backup_file "$MIHOMO_USER_CONFIG_DIR/basic_clash_config.yaml"
+      backup_file "$MIHOMO_USER_CONFIG_DIR/core_override_config.yaml"
 
-      log_info "Downloading basic_clash_config.yaml..."
-      curl -o "$MIHOMO_USER_CONFIG_DIR/basic_clash_config.yaml" $INSTALL_RES_URL_PREFIX/basic_clash_config.yaml
-    elif [ ! -f "$MIHOMO_USER_CONFIG_DIR/basic_clash_config.yaml" ]; then
-      tee "$MIHOMO_USER_CONFIG_DIR/basic_clash_config.yaml" >/dev/null <<'EOF'
+      log_info "Downloading core_override_config.yaml..."
+      curl -o "$MIHOMO_USER_CONFIG_DIR/core_override_config.yaml" $INSTALL_RES_URL_PREFIX/core_override_config.yaml
+    elif [ ! -f "$MIHOMO_USER_CONFIG_DIR/core_override_config.yaml" ]; then
+      tee "$MIHOMO_USER_CONFIG_DIR/core_override_config.yaml" >/dev/null <<'EOF'
 mixed-port: 7890
 mode: rule
 log-level: info
@@ -228,7 +228,7 @@ EOF
     fi
 
     sudo mkdir -p "$MIHOMO_CONFIG_DIR"
-    sudo cp "$MIHOMO_USER_CONFIG_DIR/basic_clash_config.yaml" "${MIHOMO_CONFIG_DIR}/config.yaml"
+    sudo cp "$MIHOMO_USER_CONFIG_DIR/core_override_config.yaml" "${MIHOMO_CONFIG_DIR}/config.yaml"
   fi
 
   if [ "$core_type" = "sing-box" ] || [ "$core_type" = "all" ]; then
@@ -570,8 +570,8 @@ create_singbox_config() {
 EOF
 
     mkdir -p "$SINGBOX_USER_CONFIG_DIR"
-    sudo cp "$SINGBOX_CONFIG_DIR/config.json" "$SINGBOX_USER_CONFIG_DIR/basic_singbox_config.json"
-    sudo chown "$USER:$(id -gn)" "$SINGBOX_USER_CONFIG_DIR/basic_singbox_config.json"
+    sudo cp "$SINGBOX_CONFIG_DIR/config.json" "$SINGBOX_USER_CONFIG_DIR/core_override_config.json"
+    sudo chown "$USER:$(id -gn)" "$SINGBOX_USER_CONFIG_DIR/core_override_config.json"
   else
     mkdir -p "$SINGBOX_USER_CONFIG_DIR"
     log_warn "Please create $SINGBOX_CONFIG_DIR/config.json manually before starting sing-box."

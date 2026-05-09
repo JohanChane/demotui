@@ -3,8 +3,8 @@ use anyhow::{Context, Result, bail};
 pub mod defs {
     pub const CONFIG_FILE: &str = "config.yaml";
     pub const DATA_FILE: &str = "clashtui.db";
-    pub const BASIC_FILE: &str = "basic_core_config.yaml";
-    pub const BASIC_SINGBOX_FILE: &str = "basic_core_config.json";
+    pub const CORE_OVERRIDE_FILE: &str = "core_override_config.yaml";
+    pub const CORE_OVERRIDE_SINGBOX_FILE: &str = "core_override_config.json";
     pub const LOG_FILE: &str = "clashtui.log";
     #[cfg(feature = "customized-theme")]
     pub const THEME_FILE: &str = "theme.yaml";

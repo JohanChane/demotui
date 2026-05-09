@@ -1,5 +1,5 @@
 //! under the data folder:
-//! * [`BasicInfo`] mihomo/basic_core_config.yaml
+//! * [`BasicInfo`] mihomo/core_override_config.yaml
 //! * [`ProfileManager`] clashtui.db
 //! * [`log`] clashtui.log
 //! * [`ConfigFile`] config.yaml
@@ -214,9 +214,9 @@ pub fn init_config() -> Result<()> {
     fs::create_dir_all(&mihomo)?;
     fs::create_dir_all(&singbox)?;
 
-    fs::write(mihomo.join(defs::BASIC_FILE), BasicInfo::DEFAULT)?;
+    fs::write(mihomo.join(defs::CORE_OVERRIDE_FILE), BasicInfo::DEFAULT)?;
     fs::write(
-        singbox.join(defs::BASIC_SINGBOX_FILE),
+        singbox.join(defs::CORE_OVERRIDE_SINGBOX_FILE),
         DEFAULT_SINGBOX_BASIC_CONFIG,
     )?;
     ConfigFile::default().to_file()?;
@@ -272,11 +272,11 @@ pub fn singbox_proxy_providers_path() -> PathBuf {
     singbox_dir().join(defs::PROXY_PROVIDERS_DIR)
 }
 pub fn load_basic() -> anyhow::Result<serde_yml::Mapping> {
-    let fp = std::fs::File::open(mihomo_dir().join(defs::BASIC_FILE))?;
+    let fp = std::fs::File::open(mihomo_dir().join(defs::CORE_OVERRIDE_FILE))?;
     serde_yml::from_reader(fp).map_err(|e| e.into())
 }
 pub fn load_basic_singbox() -> anyhow::Result<serde_json::Value> {
-    let fp = std::fs::File::open(singbox_dir().join(defs::BASIC_SINGBOX_FILE))?;
+    let fp = std::fs::File::open(singbox_dir().join(defs::CORE_OVERRIDE_SINGBOX_FILE))?;
     serde_json::from_reader(fp).map_err(|e| e.into())
 }
 pub const DEFAULT_SINGBOX_BASIC_CONFIG: &str = r#"{
@@ -302,6 +302,6 @@ pub fn keymap_path() -> PathBuf {
     DATA_DIR.get().unwrap().join(defs::KEYMAP_FILE)
 }
 
-load_save!(BasicInfo, defs::BASIC_FILE, no_save, "mihomo");
+load_save!(BasicInfo, defs::CORE_OVERRIDE_FILE, no_save, "mihomo");
 load_save!(ConfigFile, defs::CONFIG_FILE);
 load_save!(ProfileManager, defs::DATA_FILE);

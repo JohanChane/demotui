@@ -37,7 +37,7 @@ Profile 信息分两层存储，**name 是两者之间的唯一关联键**：
 data/
 ├── clashtui.db              # ProfileManager 数据库，记录 name → (dtype, no_pp)
 ├── config.yaml              # Clash 路径（clash_bin_path, clash_config_path 等）
-├── basic_clash_config.yaml  # 基础配置（API 地址、端口、secret 等），激活时 merge 进 profile
+├── core_override_config.yaml  # Core override config (API 地址、端口、secret 等)，激活时 merge 进 profile
 └── profile_yamls/
     ├── my_profile.yaml      # 实际的 Clash 配置 YAML
     ├── another.yaml
@@ -74,12 +74,10 @@ data/
    - 将 `proxy-groups` 中的 `use` 引用**解析为具体代理名**
    - 此操作**仅修改内存中的数据**，不写回 `profile_yamls/`，只影响最终输出到 `clash_config_path` 的配置
 
-3. **合并基础配置** — 调用 `lprofile.merge(&load_basic()?)`
-   - 读取 `data/basic_clash_config.yaml`，解析为 `Mapping`
-   - 将基础配置的每一项写入 `LocalProfile.content`：
-     - **普通值**（标量、Mapping）：直接覆盖
-     - **Sequence 值**：将基础配置的同名 Sequence **拼接**到 profile 的后面（profile 的值在前，基础配置的值在后）
-   - 这样 `basic_clash_config.yaml` 里的 `external-controller`、端口、`secret` 等会覆盖进 profile，确保 API 可用
+3. **合并 core override config** — 调用 `lprofile.merge(&load_basic()?)`
+    - 读取 `data/core_override_config.yaml`，解析为 `Mapping`
+    - 将 core override config 的每个顶层 key 覆盖到 profile 中
+    - 这样 `core_override_config.yaml` 里的 `external-controller`、端口、`secret` 等会覆盖进 profile，确保 API 可用
 
 4. **设置输出路径** — `lprofile.path = cfg.clash_config_path`
    - 从 `config.yaml` 的 `basic.clash_config_path` 读取（Clash 实际读取的配置文件路径）

@@ -339,42 +339,24 @@ async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
         profile.name, path.display()
     );
 
-    let profile_content: serde_json::Value = {
+    let mut profile_content: serde_json::Value = {
         let file = std::fs::File::open(&path)?;
         serde_json::from_reader(file)
             .map_err(|e| anyhow::anyhow!("Failed to read profile JSON: {e}"))?
     };
 
-    // Basic fields come from basic config: log, inbounds, experimental
-    // Non-basic fields come from profile: dns, ntp, outbounds, route
-    let mut content = match crate::config::load_basic_singbox() {
-        Ok(basic) => basic,
-        Err(e) => {
-            log::warn!("Failed to load basic singbox config: {e}, using profile as-is");
-            profile_content.clone()
-        }
-    };
-
-    // Copy non-basic fields from profile (overwrite if present)
-    const NON_BASIC_KEYS: &[&str] = &["dns", "ntp", "outbounds", "route"];
-    for &key in NON_BASIC_KEYS {
-        if let Some(val) = profile_content.get(key) {
-            content[key] = val.clone();
-        }
-    }
-
-    // Merge profile's experimental.cache_file into basic's experimental.clash_api
-    if let (Some(basic_exp), Some(profile_exp)) =
-        (content.get_mut("experimental"), profile_content.get("experimental"))
-    {
-        if let (Some(basic_obj), Some(profile_obj)) =
-            (basic_exp.as_object_mut(), profile_exp.as_object())
-        {
-            for (k, v) in profile_obj {
-                if !basic_obj.contains_key(k) {
-                    basic_obj.insert(k.clone(), v.clone());
+    match crate::config::load_basic_singbox() {
+        Ok(core_override) => {
+            if let (Some(profile_obj), Some(override_obj)) =
+                (profile_content.as_object_mut(), core_override.as_object())
+            {
+                for (key, value) in override_obj {
+                    profile_obj.insert(key.clone(), value.clone());
                 }
             }
+        }
+        Err(e) => {
+            log::warn!("Failed to load core override singbox config: {e}, using profile as-is");
         }
     }
 
@@ -387,7 +369,7 @@ async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
         std::fs::create_dir_all(parent)?;
     }
     let file = std::fs::File::create(&out_path)?;
-    serde_json::to_writer(file, &content)?;
+    serde_json::to_writer(file, &profile_content)?;
 
     db::set_current(profile)?;
     let restart_out = crate::functions::command::restart_core_service(
