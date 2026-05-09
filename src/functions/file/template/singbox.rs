@@ -356,6 +356,7 @@ pub async fn gen_template_singbox(
                         "type": "remote",
                         "format": "binary",
                         "url": url,
+                        "download_detour": "DIRECT",
                     }));
                     route_rules.push(serde_json::json!({
                         "rule_set": rp_name,
@@ -371,7 +372,10 @@ pub async fn gen_template_singbox(
     });
 
     if !route_rules.is_empty() || route_final.is_some() || !rule_sets.is_empty() {
-        let mut route = serde_json::json!({});
+        let mut route = serde_json::json!({
+            "auto_detect_interface": true,
+            "default_domain_resolver": "dns_resolver",
+        });
         if !route_rules.is_empty() {
             route["rules"] = JsonValue::Array(route_rules);
         }
