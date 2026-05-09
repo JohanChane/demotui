@@ -158,6 +158,7 @@ On remote rule_sets, `download_detour` still works but is deprecated. Prefer `ht
 | `unknown field "independent_cache"` | Remove from `dns` |
 | `missing default_domain_resolver` | Add `route.default_domain_resolver` |
 | `dependency[REJECT] not found` | Add `{"type":"block","tag":"REJECT"}` to outbounds |
+| `dependency[REJECT] not found` | Add `{"type":"block","tag":"REJECT"}` to outbounds |
 | `detour to an empty direct outbound` | Remove `detour: "DIRECT"` from DNS servers |
 | `unknown rcode: SUCCESSFUL` | Remove `rcode` from predefined DNS rule |
 | `initialize router: parse rule-set[X]` (file not found) | Change rule_set type to `remote` with SRS URL, or download the SRS file |
