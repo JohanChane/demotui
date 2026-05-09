@@ -111,6 +111,12 @@ Restart=on-failure
 RestartSec=10s
 LimitNOFILE=infinity
 
+Environment="ENABLE_DEPRECATED_LEGACY_DNS_FAKEIP_OPTIONS=true"
+Environment="ENABLE_DEPRECATED_LEGACY_DNS_SERVERS=true"
+Environment="ENABLE_DEPRECATED_OUTBOUND_DNS_RULE_ITEM=true"
+Environment="ENABLE_DEPRECATED_GEOIP=true"
+Environment="ENABLE_DEPRECATED_GEOSITE=true"
+
 [Install]
 WantedBy=multi-user.target
 EOF
