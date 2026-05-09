@@ -3,7 +3,7 @@ mod platform;
 mod utils;
 
 use crate::config::CONFIG;
-use crate::config::CoreType;
+use crate::config::{CoreType, ServiceController};
 use anyhow::Result;
 use std::{path::Path, process::Command};
 
@@ -11,14 +11,14 @@ pub use platform::*;
 use utils::*;
 
 pub fn test_config(profile_path: Option<&Path>, enable_geodata_mode: bool) -> String {
-    let cfg = &CONFIG.cfg_file.basic;
+    let cfg = &CONFIG.cfg_file.mihomo.core;
 
-    let mut cmd = Command::new(&cfg.clash_bin_path);
-    cmd.args(["-t", "-d", &cfg.clash_config_dir, "-f"]);
+    let mut cmd = Command::new(&cfg.bin_path);
+    cmd.args(["-t", "-d", &cfg.config_dir, "-f"]);
     if let Some(path) = profile_path {
         cmd.arg(path);
     } else {
-        cmd.arg(&cfg.clash_config_path);
+        cmd.arg(&cfg.config_path);
     }
 
     if enable_geodata_mode {
@@ -30,13 +30,12 @@ pub fn test_config(profile_path: Option<&Path>, enable_geodata_mode: bool) -> St
 }
 
 fn svc_operation(op: &str, password: Option<&str>, core_type: Option<CoreType>) -> Result<String> {
-    let host = &CONFIG.cfg_file.hack.service_controller;
-    let svc = &CONFIG.cfg_file.service;
-    let ct = core_type.unwrap_or(CONFIG.cfg_file.core_type);
+    let host = &ServiceController::default();
+    let ct = core_type.unwrap_or(CONFIG.core_type());
 
     let (service_name, is_user) = match ct {
-        CoreType::Mihomo => (&svc.clash_service_name, svc.is_user),
-        CoreType::Singbox => (&svc.singbox_service_name, svc.singbox_is_user),
+        CoreType::Mihomo => (&CONFIG.cfg_file.mihomo.core_service.service_name, CONFIG.cfg_file.mihomo.core_service.is_user),
+        CoreType::Singbox => (&CONFIG.cfg_file.singbox.core_service.service_name, CONFIG.cfg_file.singbox.core_service.is_user),
     };
 
     let svc_args = host.args(op, service_name, is_user);

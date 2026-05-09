@@ -77,9 +77,9 @@ impl App {
     #[cfg(target_os = "linux")]
     fn check_startup_perms(&self) {
         use crate::config::CoreType;
-        let dir_str = match crate::config::CONFIG.cfg_file.core_type {
-            CoreType::Mihomo => &crate::config::CONFIG.cfg_file.basic.clash_config_dir,
-            CoreType::Singbox => &crate::config::CONFIG.cfg_file.singbox.singbox_config_dir,
+        let dir_str = match crate::config::CONFIG.core_type() {
+            CoreType::Mihomo => &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
+            CoreType::Singbox => &crate::config::CONFIG.cfg_file.singbox.core.config_dir,
         };
         let dir = std::path::Path::new(dir_str);
         if crate::functions::command::check_file_permissions(dir) {
@@ -201,7 +201,7 @@ impl App {
                     Some('m') => {
                         log::debug!("open_dir: clash config dir");
                         let _ = crate::functions::command::open_dir(
-                            &crate::config::CONFIG.cfg_file.basic.clash_config_dir,
+                            &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
                         );
                     }
                     _ => {}

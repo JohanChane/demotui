@@ -299,7 +299,7 @@ mod actions {
 
         let is_url = source.starts_with("http://") || source.starts_with("https://");
         let is_singbox =
-            crate::config::CONFIG.cfg_file.core_type == crate::config::CoreType::Singbox;
+            crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox;
 
         if is_singbox {
             let content: serde_json::Value = if is_url {

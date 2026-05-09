@@ -214,7 +214,7 @@ async fn update_singbox_profile(
     let net_resources =
         crate::functions::file::net_resource::extract_singbox_net_resources(&content);
     let base_dir = std::path::Path::new(
-        &crate::config::CONFIG.cfg_file.singbox.singbox_config_dir,
+        &crate::config::CONFIG.cfg_file.singbox.core.config_dir,
     );
     let net_updates = crate::functions::file::template::fetch_net_resource_statuses_from_resources(
         &net_resources,
@@ -236,7 +236,7 @@ async fn update_template_profile(
     use crate::functions::file::net_resource::{NetResourceUpdate, ResourceSection};
 
     let (template, urls) = match &profile.dtype {
-        ProfileType::Template { template, urls } => (template.clone(), urls.clone()),
+        ProfileType::Template { template, proxy_provider_urls } => (template.clone(), proxy_provider_urls.clone()),
         _ => anyhow::bail!("update_template_profile called on non-Template profile"),
     };
 
@@ -282,7 +282,7 @@ pub async fn select(profile: Profile) -> anyhow::Result<()> {
         return select_singbox(profile).await;
     }
 
-    let cfg = &crate::config::CONFIG.cfg_file.basic;
+    let cfg = &crate::config::CONFIG.cfg_file.mihomo.core;
     let mut lprofile = profile.clone().load_local_profile()?;
     anyhow::ensure!(
         lprofile.content.is_some(),
@@ -301,7 +301,7 @@ pub async fn select(profile: Profile) -> anyhow::Result<()> {
     rewrite_provider_paths(lprofile.content.as_mut());
 
     lprofile.merge(&crate::config::load_basic()?)?;
-    let out_path = std::path::absolute(std::path::PathBuf::from(&cfg.clash_config_path))
+    let out_path = std::path::absolute(std::path::PathBuf::from(&cfg.config_path))
         .map_err(|e| anyhow::anyhow!("Failed to resolve config path: {e}"))?;
     lprofile.path = out_path.clone();
     lprofile.sync_to_disk()?;
@@ -314,7 +314,7 @@ pub async fn select(profile: Profile) -> anyhow::Result<()> {
 fn rewrite_provider_paths(content: Option<&mut serde_yml::Mapping>) {
     let Some(content) = content else { return };
     let cache = std::path::PathBuf::from(
-        &crate::config::CONFIG.cfg_file.basic.clash_config_dir,
+        &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
     );
     for section in &["proxy-providers", "rule-providers"] {
         let Some(serde_yml::Value::Mapping(providers)) = content.get_mut(*section) else {
@@ -378,7 +378,7 @@ async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
     }
 
     let out_path = std::path::absolute(std::path::PathBuf::from(
-        &crate::config::CONFIG.cfg_file.singbox.singbox_config_path,
+        &crate::config::CONFIG.cfg_file.singbox.core.config_path,
     ))
     .map_err(|e| anyhow::anyhow!("Failed to resolve singbox config path: {e}"))?;
 

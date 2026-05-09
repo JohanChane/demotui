@@ -17,6 +17,7 @@ mod_agent!(
         ([KeyCode::Char('k')], Key::MoveUp, ""),
         ([KeyCode::Char('d'), KeyCode::Char('d')], Key::Action(Action::Delete), "Delete template"),
         ([KeyCode::Char('e')], Key::Action(Action::Edit), ""),
+        ([KeyCode::Char('E')], Key::Action(Action::EditProviders), "Edit template_proxy_providers file"),
         ([KeyCode::Char('p')], Key::Action(Action::Preview), ""),
         ([KeyCode::Enter], Key::Action(Action::Generate), ""),
         ([KeyCode::Char('f')], Key::Action(Action::FzfFind), "Fuzzy find template"),
@@ -31,6 +32,7 @@ pub enum Action {
     Generate,
     Delete,
     Edit,
+    EditProviders,
     Preview,
     Search,
     FzfFind,
@@ -121,6 +123,10 @@ impl DualTabContentMate for Template {
                         actions::fzf_find(items).spawn_at(task_set);
                         return false;
                     }
+                    Action::EditProviders => {
+                        action.act(String::new()).spawn_at(task_set);
+                        return false;
+                    }
                     _ => {
                         let name = get_name!(self, state);
                         log::debug!("Template::Action name={name}");
@@ -193,6 +199,7 @@ mod actions {
                 Self::Generate => generate(name).await,
                 Self::Delete => delete(name).await,
                 Self::Edit => _edit(name).await,
+                Self::EditProviders => _edit_providers().await,
                 Self::Preview => preview(name).await,
                 Self::Search => search().await,
                 Self::FzfFind => unreachable!("FzfFind handled directly"),
@@ -238,6 +245,16 @@ mod actions {
     async fn _edit(name: String) -> CB {
         let path = crate::functions::file::TEMPLATE_PATH.join(&name);
         log::debug!("template::_edit: path={}", path.display());
+        tri!(edit(path.to_str().unwrap()));
+        do_nothing()
+    }
+
+    async fn _edit_providers() -> CB {
+        let path = match crate::config::CONFIG.core_type() {
+            crate::config::CoreType::Mihomo => crate::config::template_proxy_providers_path(),
+            crate::config::CoreType::Singbox => crate::config::singbox_template_proxy_providers_path(),
+        };
+        log::debug!("template::_edit_providers: path={}", path.display());
         tri!(edit(path.to_str().unwrap()));
         do_nothing()
     }

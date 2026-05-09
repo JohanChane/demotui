@@ -22,7 +22,7 @@ ClashTui 配置的文件结构:
 ├── mihomo
 │   ├── basic_core_config.yaml      # Core Config 的基础字段配置
 │   ├── profiles                    # Profile 对应的 yaml 文件 (mihomo 的配置格式是 yaml)
-│   ├── template_proxy_providers    # 存放生成 template type profile 时, 需要的 urls
+│   ├── template_proxy_providers    # 存放生成 template type profile 时, 需要的 urls。是文件
 │   └── templates                   # template 存放的目录
 └── sing-box
     ├── proxy-providers             # proxy-providers 文件的根目录

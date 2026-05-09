@@ -80,7 +80,7 @@ pub fn apply_template(template_name: &str, profile_name: &str, urls: &[String]) 
     let mut pm = pm!();
     pm.insert(profile_name, ProfileType::Template {
         template: template_name.to_owned(),
-        urls: urls.to_vec(),
+        proxy_provider_urls: urls.to_vec(),
     });
     pm.to_file()?;
     Ok(())
@@ -109,7 +109,7 @@ pub async fn apply_template_singbox(
     let mut pm = pm!();
     pm.insert(profile_name, ProfileType::Template {
         template: template_name.to_owned(),
-        urls: urls.to_vec(),
+        proxy_provider_urls: urls.to_vec(),
     });
     pm.to_file()?;
     Ok(())
@@ -167,7 +167,7 @@ pub async fn update_profile_without_pp(
                 .unwrap_or("")
                 .to_owned();
             let cfg_dir = std::path::PathBuf::from(
-                &crate::config::CONFIG.cfg_file.basic.clash_config_dir,
+                &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
             );
             download_handles.push(tokio::task::spawn_blocking(move || {
                 if !pp_path.is_empty() {
@@ -306,7 +306,7 @@ pub async fn update_profile_without_pp(
                 .unwrap_or("")
                 .to_owned();
             let cfg_dir = std::path::PathBuf::from(
-                &crate::config::CONFIG.cfg_file.basic.clash_config_dir,
+                &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
             );
             download_handles.push(tokio::task::spawn_blocking(move || {
                 if !rp_path.is_empty() {
@@ -408,7 +408,7 @@ pub async fn fetch_net_resource_statuses(
     for resource in resources {
         let url = resource.url;
         let name = resource.name;
-        let path = std::path::PathBuf::from(&crate::config::CONFIG.cfg_file.basic.clash_config_dir)
+        let path = std::path::PathBuf::from(&crate::config::CONFIG.cfg_file.mihomo.core.config_dir)
             .join(&resource.path);
         let section = resource.section;
         handles.push(tokio::task::spawn_blocking(move || {

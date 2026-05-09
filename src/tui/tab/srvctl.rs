@@ -132,29 +132,29 @@ impl TabContent for SrvCtlContent {
     fn init(&mut self, task_set: &mut FutureSet<Self>, state: &mut Self::State) {
         self.ops = SrvCtlOp::all();
         let cfg = &crate::config::CONFIG.cfg_file;
-        match cfg.core_type {
+        match crate::config::CONFIG.core_type() {
             CoreType::Mihomo => {
-                self.service_name = cfg.service.clash_service_name.clone();
+                self.service_name = cfg.mihomo.core_service.service_name.clone();
                 if self.service_name.is_empty() {
                     self.service_name = "clashtui_mihomo".to_owned();
                 }
-                self.bin_path = cfg.basic.clash_bin_path.clone();
+                self.bin_path = cfg.mihomo.core.bin_path.clone();
                 if self.bin_path.is_empty() {
                     self.bin_path = "/usr/bin/mihomo".to_owned();
                 }
-                self.is_user = cfg.service.is_user;
+                self.is_user = cfg.mihomo.core_service.is_user;
                 self.core_label = "mihomo".to_owned();
             }
             CoreType::Singbox => {
-                self.service_name = cfg.service.singbox_service_name.clone();
+                self.service_name = cfg.singbox.core_service.service_name.clone();
                 if self.service_name.is_empty() {
                     self.service_name = "clashtui_singbox".to_owned();
                 }
-                self.bin_path = cfg.singbox.singbox_bin_path.clone();
+                self.bin_path = cfg.singbox.core.bin_path.clone();
                 if self.bin_path.is_empty() {
                     self.bin_path = "/usr/bin/sing-box".to_owned();
                 }
-                self.is_user = cfg.service.singbox_is_user;
+                self.is_user = cfg.singbox.core_service.is_user;
                 self.core_label = "sing-box".to_owned();
             }
         }
@@ -267,7 +267,7 @@ impl TabContent for SrvCtlContent {
                             )
                         }
                         SrvCtlOp::SwitchCore => {
-                            let old_type = crate::config::CONFIG.cfg_file.core_type;
+                            let old_type = crate::config::CONFIG.core_type();
                             let new_type = match old_type {
                                 CoreType::Mihomo => CoreType::Singbox,
                                 CoreType::Singbox => CoreType::Mihomo,

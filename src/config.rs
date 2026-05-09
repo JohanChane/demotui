@@ -1,12 +1,15 @@
 //! under the data folder:
-//! * [`BasicInfo`] mihomo/basic_clash_config.yaml
+//! * [`BasicInfo`] mihomo/basic_core_config.yaml
 //! * [`ProfileManager`] clashtui.db
 //! * [`log`] clashtui.log
 //! * [`ConfigFile`] config.yaml
-//! * `Folder` mihomo/profile_yamls/
+//! * `Folder` mihomo/profiles/
 //! * `Folder` mihomo/templates/
-//! * `Folder` sing-box/profile_jsons/
+//! * `File` mihomo/template_proxy_providers
+//! * `Folder` sing-box/profiles/
 //! * `Folder` sing-box/templates/
+//! * `File` sing-box/template_proxy_providers
+//! * `Folder` sing-box/proxy-providers/
 
 use anyhow::{Context, Result, ensure};
 use core::*;
@@ -18,7 +21,7 @@ use std::{
 use util::*;
 
 mod core;
-pub use core::CoreType;
+pub use core::{CoreType, ServiceController};
 #[macro_use]
 mod util;
 pub mod database;
@@ -67,20 +70,35 @@ impl Config {
             let _ = data.to_file();
         }
         let data: Mutex<ProfileManager> = data.into();
-        cfg_file.core_type = data.lock().unwrap().core_type;
-        if !cfg_file.basic.clash_config_path.is_empty() {
-            cfg_file.basic.clash_config_path = std::path::absolute(
-                std::path::PathBuf::from(&cfg_file.basic.clash_config_path),
+        if !cfg_file.mihomo.core.config_path.is_empty() {
+            cfg_file.mihomo.core.config_path = std::path::absolute(
+                std::path::PathBuf::from(&cfg_file.mihomo.core.config_path),
             )
-            .context("Failed to resolve clash_config_path")?
+            .context("Failed to resolve mihomo config_path")?
             .display()
             .to_string();
         }
-        if !cfg_file.basic.clash_config_dir.is_empty() {
-            cfg_file.basic.clash_config_dir = std::path::absolute(
-                std::path::PathBuf::from(&cfg_file.basic.clash_config_dir),
+        if !cfg_file.mihomo.core.config_dir.is_empty() {
+            cfg_file.mihomo.core.config_dir = std::path::absolute(
+                std::path::PathBuf::from(&cfg_file.mihomo.core.config_dir),
             )
-            .context("Failed to resolve clash_config_dir")?
+            .context("Failed to resolve mihomo config_dir")?
+            .display()
+            .to_string();
+        }
+        if !cfg_file.singbox.core.config_dir.is_empty() {
+            cfg_file.singbox.core.config_dir = std::path::absolute(
+                std::path::PathBuf::from(&cfg_file.singbox.core.config_dir),
+            )
+            .context("Failed to resolve singbox config_dir")?
+            .display()
+            .to_string();
+        }
+        if !cfg_file.singbox.core.config_path.is_empty() {
+            cfg_file.singbox.core.config_path = std::path::absolute(
+                std::path::PathBuf::from(&cfg_file.singbox.core.config_path),
+            )
+            .context("Failed to resolve singbox config_path")?
             .display()
             .to_string();
         }
@@ -129,17 +147,20 @@ impl Config {
             singbox_secret,
         })
     }
+    pub fn core_type(&self) -> CoreType {
+        self.data.lock().unwrap().core_type
+    }
     pub fn save(&self) -> Result<()> {
         self.data.lock().unwrap().to_file()
     }
     pub fn controller_for_core(&self) -> &str {
-        match self.cfg_file.core_type {
+        match self.data.lock().unwrap().core_type {
             CoreType::Mihomo => &self.external_controller,
             CoreType::Singbox => &self.singbox_external_controller,
         }
     }
     pub fn secret_for_core(&self) -> Option<&str> {
-        match self.cfg_file.core_type {
+        match self.data.lock().unwrap().core_type {
             CoreType::Mihomo => self.secret.as_deref(),
             CoreType::Singbox => self.singbox_secret.as_deref(),
         }
@@ -205,6 +226,7 @@ pub fn init_config() -> Result<()> {
     fs::create_dir(mihomo.join(defs::PROFILE_YAMLS_DIR))?;
     fs::create_dir(singbox.join(defs::TEMPLATE_DIR))?;
     fs::create_dir(singbox.join(defs::PROFILE_JSONS_DIR))?;
+    fs::create_dir(singbox.join(defs::PROXY_PROVIDERS_DIR))?;
 
     Ok(())
 }
@@ -241,7 +263,13 @@ pub fn provider_cache_path() -> PathBuf {
     mihomo_dir().join(defs::PROVIDER_CACHE_DIR)
 }
 pub fn template_proxy_providers_path() -> PathBuf {
-    mihomo_dir().join(defs::TEMPLATE_DIR).join("template_proxy_providers")
+    mihomo_dir().join(defs::TEMPLATE_PROXY_PROVIDERS_FILE)
+}
+pub fn singbox_template_proxy_providers_path() -> PathBuf {
+    singbox_dir().join(defs::TEMPLATE_PROXY_PROVIDERS_FILE)
+}
+pub fn singbox_proxy_providers_path() -> PathBuf {
+    singbox_dir().join(defs::PROXY_PROVIDERS_DIR)
 }
 pub fn load_basic() -> anyhow::Result<serde_yml::Mapping> {
     let fp = std::fs::File::open(mihomo_dir().join(defs::BASIC_FILE))?;
