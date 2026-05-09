@@ -20,13 +20,13 @@ ClashTui 配置的文件结构:
 ├── clashtui.log                    # ClashTui 的日志
 ├── config.yaml                     # ClashTui 的配置
 ├── mihomo
-│   ├── basic_core_config.yaml      # Core Config 的基础字段配置
+│   ├── core_override_config.yaml   # 在生成 config_path 的配置文件时, 该文件的顶层 key 会覆盖 Profile 的顶层 key
 │   ├── profiles                    # Profile 对应的 yaml 文件 (mihomo 的配置格式是 yaml)
 │   ├── template_proxy_providers    # 存放生成 template type profile 时, 需要的 urls。是文件
 │   └── templates                   # template 存放的目录
 └── sing-box
     ├── proxy-providers             # proxy-providers 文件的根目录
-    ├── basic_core_config.json
+    ├── core_override_config.json
     ├── profiles                    # Profile 对应的 json 文件 (sing-box 的配置是 json 格式)
     ├── template_proxy_providers
     └── templates
@@ -101,30 +101,9 @@ ClashTui 使用 Linux 组文件权限管理 Core 的文件: User 加入每个 Co
 
 为了使用户知道修改了什么, ClashTui 会转到 CLI 模式, 让用户输入密码。修复文件权限之后, ClashTui 重新启动。
 
-## Mihomo 和 sing-box 配置的基础字段与非基础字段
+## Mihomo 和 sing-box 配置合并设计
 
-为了合并 profile 和 basic_core_config。这里将 Core 的配置划分为基础字段与非基础字段 (顶层 key):
--   非基础字段: proxies, proxy-providers, rule, rule-providers, proxy-groups
--   基础字段: 不是非基础字段的, 就是基础字段
-
-Mihomo 的非基础字段:
--   `proxies`: 代理节点定义
--   `proxy-providers`: 远程代理节点源
--   `proxy-groups`: 选择器 / url-test 等分组
--   `rules`: 内联路由规则
--   `rule-providers`: 远程规则集源
--   `sub-rules`: 嵌套/导入的规则预设
-
-Mihomo 的基础字段:
--   `external-controller`, `mixed-port`, `mode`, `tun`, `log-level`, `allow-lan`, `ipv6`, `dns`, `sniffer`, `hosts`, `secret`, `profile`, `geodata-mode`, `find-process-mode`, `tcp-concurrent`, `unified-delay`, `keep-alive-interval` 等 (所有非非基础字段的顶层 YAML key)
-
-sing-box 的非基础字段:
--   `outbounds`: 代理节点 + 代理分组 (selector/urltest)，全部在一个扁平列表中，通过 `tag` 标识
--   `route.rules`: 内联路由规则
--   `route.rule_set`: 远程 `.srs` 规则集引用
-
-sing-box 的基础字段:
--   `experimental.clash_api` (含 `external_controller`, `secret`), `inbounds` (mixed / tun / tun gateway), `log` (含 `log.level`), `dns`, `route` (减去 `rules` 和 `rule_set`, 如 `route.auto_detect_interface`, `route.final`), `domain_strategy` 等 (所有非非基础字段的顶层 JSON key)
+使用 basic_core_config 的顶层 key 覆盖 profile 的顶层 key 即可。
 
 ## Template 的管理设计
 
@@ -186,7 +165,7 @@ File/Url Profile 的更新:
 -   取得 profiles 的网络资源 (proxy-providers 和 rule-providers), 然后更新到 Core Config Dir 的相应目录
 
 File/Url Profile 的选择:
--   取出 Profile 的非基础字段和 basic_core_config 的基础字段, 将它们组成 Core Config, 写到 Core Config Path (保证基础字段在前面)
+-   参考配置合并设计
 
 为什么不使用 api 来更新 Profile:
 -   因为通过 api 更新 Profile 并没有返回值 (不知道是否更新成功), 则不知道有哪些东西要更新。
