@@ -17,7 +17,10 @@ pub fn get_all_templates() -> std::io::Result<Vec<String>> {
         .collect())
 }
 pub fn read_template_proxy_providers() -> anyhow::Result<Vec<String>> {
-    let path = crate::config::template_proxy_providers_path();
+    let path = match crate::config::CONFIG.core_type() {
+        crate::config::CoreType::Mihomo => crate::config::template_proxy_providers_path(),
+        crate::config::CoreType::Singbox => crate::config::singbox_template_proxy_providers_path(),
+    };
     let content = std::fs::read_to_string(&path)
         .with_context(|| format!("Failed to read template_proxy_providers: {}", path.display()))?;
     Ok(content

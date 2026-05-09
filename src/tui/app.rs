@@ -200,9 +200,11 @@ impl App {
                     }
                     Some('m') => {
                         log::debug!("open_dir: clash config dir");
-                        let _ = crate::functions::command::open_dir(
-                            &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
-                        );
+                        let dir_str = match crate::config::CONFIG.core_type() {
+                            crate::config::CoreType::Mihomo => &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
+                            crate::config::CoreType::Singbox => &crate::config::CONFIG.cfg_file.singbox.core.config_dir,
+                        };
+                        let _ = crate::functions::command::open_dir(dir_str);
                     }
                     _ => {}
                 }
