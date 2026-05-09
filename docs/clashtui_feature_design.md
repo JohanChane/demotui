@@ -22,13 +22,13 @@ ClashTui 配置的文件结构:
 ├── mihomo
 │   ├── core_override_config.yaml   # 在生成 config_path 的配置文件时, 该文件的顶层 key 会覆盖 Profile 的顶层 key
 │   ├── profiles                    # Profile 对应的 yaml 文件 (mihomo 的配置格式是 yaml)
-│   ├── template_proxy_providers    # 存放生成 template type profile 时, 需要的 urls。是文件
+│   ├── template_proxy_providers.yaml    # 存放生成 template type profile 时, 需要的 pvd_name-url(s)。
 │   └── templates                   # template 存放的目录
 └── sing-box
     ├── proxy-providers             # proxy-providers 文件的根目录
     ├── core_override_config.json
     ├── profiles                    # Profile 对应的 json 文件 (sing-box 的配置是 json 格式)
-    ├── template_proxy_providers
+    ├── template_proxy_providers.yaml
     └── templates
 ```
 
@@ -105,8 +105,6 @@ ClashTui 使用 Linux 组文件权限管理 Core 的文件: User 加入每个 Co
 
 使用 basic_core_config 的顶层 key 覆盖 profile 的顶层 key 即可。
 
-## Template 的管理设计
-
 ## Profile 的管理设计
 
 将 Profile 的信息存放到 clashtui.db, 格式如下:
@@ -127,8 +125,10 @@ mihomo_profiles:
   common_tpl.yaml.tpl:    # Template type profile name 会以 `.tpl` 作为后缀
     dtype: !Template
       template: common_tpl.yaml
-      proxy_provider_urls:
-      - https://example.com
+      proxy_provider_group:
+        pvd:
+        - {name: "foo_pvd", url: "https://example.com"}
+        - {name: "bar_pvd", url: "https://example.com"}
     no_pp: false
 singbox_profiles:
   my:
@@ -143,8 +143,10 @@ singbox_profiles:
   common_tpl.json.tpl:    # Template type profile name 会以 `.tpl` 作为后缀
     dtype: !Template
       template: common_tpl.json
-      proxy_provider_urls:
-      - https://example.com
+      proxy_provider_group:
+        pvd:
+        - {name: "foo_pvd", url: "https://example.com"}
+        - {name: "bar_pvd", url: "https://example.com"}
     no_pp: false
 ```
 
@@ -171,6 +173,10 @@ File/Url Profile 的选择:
 -   因为通过 api 更新 Profile 并没有返回值 (不知道是否更新成功), 则不知道有哪些东西要更新。
 -   所以自己实现更新 Profile 会有比较好的体验。
 
+*Mihomo 的 proxy-providers 和 rule-providers 没有 path 时, 则 path 会被设置为 `<url 的 md5 的值>.yaml`。ClashTui 需要支持这个设定。*
+
+## Template 的管理设计
+
 因为我比较喜欢将每个 proxy-providers 分组, 而不是混合在一起。所以设计了 Template 的功能。
 
 Template 文件主要有下面几个信息:
@@ -181,8 +187,7 @@ Template 文件主要有下面几个信息:
 
     ```yaml
     - name: "At"
-      tpl_param:
-        providers: ["pvd"]
+      expand_this_group_with: ["${pvd}"] # 也可以写多个 proxy-provider name, e.g. ["${pvd::pvd0}", "${pvd::pvd2}"]
       type: url-test
       <<: *pa_dt
     ```
@@ -190,24 +195,66 @@ Template 文件主要有下面几个信息:
     会展开为 `At-pvd0, At-pvd1, ...`
 
 -   在 proxy-groups 中使用 proxy-provider groups:
-    -   比如: 用 `<pvd>`, 表示使用 proxy-provider group。它会被展开为 `pvd0, pvd1, ...`
+    -   比如: 用 `${pvd}`, 表示使用 proxy-provider group。它会被展开为 `pvd0, pvd1, ...`
 
-综上, 只要提供 proxy-provider urls, 则可以生成一个 Profile 文件。
+Template 的一个关键点是, Template 文件内容不会包含 proxy-provider 的 proxy name, 
+所以只需要写上 proxy-provider group name (pvd) 和 proxy-provider name (pvd0, pvd1, ...) 即可知道 Template 要生成什么样的文件了。
+
+综上, 只要提供 proxy-provider name + proxy-provider urls, 则可以生成一个 Profile 文件。
+
+同理, sing-box 也是如此。比如:
+
+为 proxy-provider 扩展 outbounds:
+
+```json
+  "outbounds": [
+    {
+      "type": "urltest",
+      "tag": "auto-proxy",
+      "expand_this_outbounds_with": ["${pvd}"], // 也可以写多个 proxy-provider name, e.g. ["${pvd::pvd0}", "${pvd::pvd2}"]
+      "url": "https://www.gstatic.com/generate_204",
+      "interval": "5m",
+      "tolerance": 50
+    },
+  ]
+```
+
+proxy-provider 的展开:
+
+```json
+  "outbounds": [
+    {
+      "type": "selector",
+      "tag": "select-proxy",
+      "outbounds": ["auto-proxy", "${pvd0}"],
+      "default": "auto-proxy"
+    },
+  ]
+```
 
 因为 sing-box 不支持 proxy-providers, 但是可以用 Template 的功能来替代它:
 -   生成 Tempate type profile 时, 将 urls 存放到 clashtui.db 的 profile 字段中:
     
     比如:
-    ```
+    ```yaml
     mihomo_profiles:
       common_tpl.json.tpl:
         dtype: !Template
           template: singbox_common_tpl.json
-          proxy_provider_urls:
-          - https://hajimi.nvimy.com/file/e7f20e25-058a-4c87-84db-8dc87e183b41/mojie_johan.yaml
+          proxy_provider_group:
+            pvd:
+            - {name: "foo_pvd", url: "https://example.com"}
+            - {name: "bar_pvd", url: "https://example.com"}
     ```
 
--   proxy-providers 还有 url 的文件的路径信息, 为了方便将它固定为 `<clash_config_root>/sing-box/<profile_name>/{pvd0,pvd1,...}`。 
+    template_proxy_providers.yaml
+    ```yaml
+    pvd:  # proxy-provider group name
+    - foo_pvd: https://example.com
+    - bar_pvd: https://example.com
+    ```
+
+-   proxy-providers 还有 url 的文件的路径信息, 比如: 放在 `~/.config/clashtui/sing-box/proxy-providers/<url 的 md5 的值>.yaml`。 
 -   有了上面的信息就可以替代 proxy-providers 的功能了。
 
 Template type profile 的生成:
