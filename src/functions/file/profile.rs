@@ -338,14 +338,43 @@ async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
         profile.name, path.display()
     );
 
-    let mut content: serde_json::Value = {
+    let profile_content: serde_json::Value = {
         let file = std::fs::File::open(&path)?;
         serde_json::from_reader(file)
             .map_err(|e| anyhow::anyhow!("Failed to read profile JSON: {e}"))?
     };
 
-    if let Ok(basic) = crate::config::load_basic_singbox() {
-        merge_singbox_json(&mut content, &basic);
+    // Basic fields come from basic config: log, inbounds, experimental
+    // Non-basic fields come from profile: dns, ntp, outbounds, route
+    let mut content = match crate::config::load_basic_singbox() {
+        Ok(basic) => basic,
+        Err(e) => {
+            log::warn!("Failed to load basic singbox config: {e}, using profile as-is");
+            profile_content.clone()
+        }
+    };
+
+    // Copy non-basic fields from profile (overwrite if present)
+    const NON_BASIC_KEYS: &[&str] = &["dns", "ntp", "outbounds", "route"];
+    for &key in NON_BASIC_KEYS {
+        if let Some(val) = profile_content.get(key) {
+            content[key] = val.clone();
+        }
+    }
+
+    // Merge profile's experimental.cache_file into basic's experimental.clash_api
+    if let (Some(basic_exp), Some(profile_exp)) =
+        (content.get_mut("experimental"), profile_content.get("experimental"))
+    {
+        if let (Some(basic_obj), Some(profile_obj)) =
+            (basic_exp.as_object_mut(), profile_exp.as_object())
+        {
+            for (k, v) in profile_obj {
+                if !basic_obj.contains_key(k) {
+                    basic_obj.insert(k.clone(), v.clone());
+                }
+            }
+        }
     }
 
     let out_path = std::path::absolute(std::path::PathBuf::from(
@@ -363,53 +392,6 @@ async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
     crate::functions::restful::config::reload(&out_path.display().to_string())
         .map_err(|e| anyhow::anyhow!("Config written but reload failed: {e}"))?;
     Ok(())
-}
-
-fn merge_singbox_json(target: &mut serde_json::Value, source: &serde_json::Value) {
-    let serde_json::Value::Object(t) = target else { return };
-    let serde_json::Value::Object(s) = source else { return };
-    for (key, src_val) in s.iter() {
-        match t.get_mut(key) {
-            Some(serde_json::Value::Array(t_arr)) if src_val.is_array() => {
-                let mut combined: Vec<serde_json::Value> =
-                    src_val.as_array().unwrap().clone();
-                combined.append(t_arr);
-                *t_arr = combined;
-            }
-            Some(serde_json::Value::Object(_)) if src_val.is_object() => {
-                if let Some(serde_json::Value::Object(t_obj)) = t.get_mut(key) {
-                    merge_singbox_json_obj(t_obj, src_val.as_object().unwrap());
-                }
-            }
-            _ => {
-                t.insert(key.clone(), src_val.clone());
-            }
-        }
-    }
-}
-
-fn merge_singbox_json_obj(
-    target: &mut serde_json::Map<String, serde_json::Value>,
-    source: &serde_json::Map<String, serde_json::Value>,
-) {
-    for (key, src_val) in source.iter() {
-        match target.get_mut(key) {
-            Some(serde_json::Value::Array(t_arr)) if src_val.is_array() => {
-                let mut combined: Vec<serde_json::Value> =
-                    src_val.as_array().unwrap().clone();
-                combined.append(t_arr);
-                *t_arr = combined;
-            }
-            Some(serde_json::Value::Object(_)) if src_val.is_object() => {
-                if let Some(serde_json::Value::Object(t_obj)) = target.get_mut(key) {
-                    merge_singbox_json_obj(t_obj, src_val.as_object().unwrap());
-                }
-            }
-            _ => {
-                target.insert(key.clone(), src_val.clone());
-            }
-        }
-    }
 }
 
 pub fn extract_domain(url: &str) -> Option<&str> {
