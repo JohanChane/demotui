@@ -1,5 +1,6 @@
 use super::{MAX_SUPPORTED_TEMPLATE_VERSION, PROFILE_JSONS_PATH, PROFILE_YAMLS_PATH, TEMPLATE_PATH};
 use crate::config::database::ProfileType;
+use anyhow::Context as _;
 
 mod version1;
 pub mod singbox;
@@ -15,6 +16,17 @@ pub fn get_all_templates() -> std::io::Result<Vec<String>> {
         })
         .collect())
 }
+pub fn read_template_proxy_providers() -> anyhow::Result<Vec<String>> {
+    let path = crate::config::template_proxy_providers_path();
+    let content = std::fs::read_to_string(&path)
+        .with_context(|| format!("Failed to read template_proxy_providers: {}", path.display()))?;
+    Ok(content
+        .lines()
+        .map(|l| l.trim().to_owned())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect())
+}
+
 pub fn create_template(path: String) -> anyhow::Result<Option<String>> {
     let path = std::path::PathBuf::from(path);
     let file = std::fs::File::open(&path)?;
