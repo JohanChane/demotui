@@ -243,7 +243,7 @@ async fn update_template_profile(
     let mut statuses: Vec<NetResourceUpdate> = Vec::new();
 
     if is_singbox {
-        super::template::apply_template_singbox(&template, &profile.name, &groups, with_proxy).await?;
+        super::template::apply_template_singbox(&template, &profile.name, &groups, with_proxy, true).await?;
         for (_, providers) in &groups {
             for (name, url) in providers {
                 let domain = extract_domain(url).unwrap_or("unknown");

@@ -125,10 +125,10 @@ mihomo_profiles:
   common_tpl.yaml.tpl:    # Template type profile name 会以 `.tpl` 作为后缀
     dtype: !Template
       template: common_tpl.yaml
-      proxy_provider_group:
-        pvd:
-        - {name: "foo_pvd", url: "https://example.com"}
-        - {name: "bar_pvd", url: "https://example.com"}
+        proxy_provider_group:
+          pvd:
+            foo_pvd: https://example.com
+            bar_pvd: https://example.com
     no_pp: false
 singbox_profiles:
   my:
@@ -143,10 +143,10 @@ singbox_profiles:
   common_tpl.json.tpl:    # Template type profile name 会以 `.tpl` 作为后缀
     dtype: !Template
       template: common_tpl.json
-      proxy_provider_group:
-        pvd:
-        - {name: "foo_pvd", url: "https://example.com"}
-        - {name: "bar_pvd", url: "https://example.com"}
+        proxy_provider_group:
+          pvd:
+            foo_pvd: https://example.com
+            bar_pvd: https://example.com
     no_pp: false
 ```
 
@@ -243,15 +243,15 @@ proxy-provider 的展开:
           template: singbox_common_tpl.json
           proxy_provider_group:
             pvd:
-            - {name: "foo_pvd", url: "https://example.com"}
-            - {name: "bar_pvd", url: "https://example.com"}
+              foo_pvd: https://example.com
+              bar_pvd: https://example.com
     ```
 
     template_proxy_providers.yaml:
     ```yaml
     pvd:  # proxy-provider group name
-    - foo_pvd: https://example.com
-    - bar_pvd: https://example.com
+      foo_pvd: https://example.com
+      bar_pvd: https://example.com
     ```
 
 -   proxy-providers 还有 url 的文件的路径信息, 比如: 放在 `~/.config/clashtui/sing-box/proxy-providers/<url 的 md5 的值>.yaml`。 
@@ -263,7 +263,7 @@ Template type profile 的生成:
 -   生成 clashtui.db 的 profile 信息
 
 Template type profile 的更新:
--   更新 proxy_provider_urls
+-   下载 clashtui.db 的 proxy_provider_urls 到 proxy-providers 目录 (选择 profile 就是用这里的文件了)
 -   为了 mihomo 和 sing-box 的统一, 重新生成 profile
 
 Mihomo template type pofile 的选择:
@@ -330,13 +330,13 @@ proxy-groups:
 template_proxy_providers.yaml:
 ```yaml
 pvd:  # proxy-provider group name
-- pvd0: https://example.com
-- pvd1: https://example.com
+  pvd0: https://example.com
+  pvd1: https://example.com
 ```
 ## sing-box 的模板例子
 
 ```json
-
+{
   "log": {
     "level": "info",
     "timestamp": true
@@ -408,9 +408,8 @@ pvd:  # proxy-provider group name
     {
       "type": "selector",
       "tag": "Entry",
-      "outbounds": ["${Auto}", "${Select}", "${pvd}"], // OR `"outbounds": ["auto-proxy", "${pvd::pvd0}", "${pvd::pvd2}"],`
+      "outbounds": ["${Auto}", "${Select}", "${pvd}"] // OR `"outbounds": ["auto-proxy", "${pvd::pvd0}", "${pvd::pvd2}"],`
                                           // `"${Auto}"` 会扩展为 `Auto-pvd0, Auto-pvd1, ...`
-      "default": "auto-proxy"
     },
     // 如果用 `"${pvd}"` 会扩展为 `Auto-pvd0, Auto-pvd1, ...`
     {
@@ -532,8 +531,8 @@ pvd:  # proxy-provider group name
 template_proxy_providers.yaml:
 ```yaml
 pvd:  # proxy-provider group name
-- pvd0: https://example.com
-- pvd1: https://example.com
+  pvd0: https://example.com
+  pvd1: https://example.com
 ```
 
 ## 解决 Mihomo/sing-box proxy-providers 的 proxy name 同名的方法

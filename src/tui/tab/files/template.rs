@@ -216,7 +216,7 @@ mod actions {
         let groups = tri!(read_template_proxy_providers());
         let is_singbox = crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox;
         if is_singbox {
-            tri!(apply_template_singbox(&name, &profile_name, &groups, false).await);
+            tri!(apply_template_singbox(&name, &profile_name, &groups, false, false).await);
         } else {
             tri!(apply_template(&name, &profile_name, &groups));
         }

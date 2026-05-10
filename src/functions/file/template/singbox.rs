@@ -1,7 +1,32 @@
 use anyhow::Context;
 use serde_json::Value as JsonValue;
+use std::path::PathBuf;
 
 use crate::config::database::ProxyProviderGroups;
+
+fn proxy_provider_cache_path(url: &str) -> PathBuf {
+    let hash = format!("{:x}", md5::compute(url.as_bytes()));
+    crate::config::singbox_proxy_providers_path().join(format!("{hash}.yaml"))
+}
+
+fn load_cached_proxies(url: &str) -> Option<Vec<JsonValue>> {
+    let path = proxy_provider_cache_path(url);
+    if !path.exists() {
+        return None;
+    }
+    let file = std::fs::File::open(&path).ok()?;
+    serde_json::from_reader(file).ok()
+}
+
+fn save_cached_proxies(url: &str, proxies: &[JsonValue]) {
+    let path = proxy_provider_cache_path(url);
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(file) = std::fs::File::create(&path) {
+        let _ = serde_json::to_writer(file, proxies);
+    }
+}
 
 fn interval_to_duration(seconds: u64) -> String {
     if seconds >= 3600 && seconds % 3600 == 0 {
@@ -103,6 +128,7 @@ pub async fn gen_template_singbox(
     _template_name: &str,
     groups: &ProxyProviderGroups,
     with_proxy: bool,
+    force_refresh: bool,
 ) -> anyhow::Result<JsonValue> {
     use std::collections::HashMap;
 
@@ -114,7 +140,19 @@ pub async fn gen_template_singbox(
             let url = url.clone();
             let pp_name = pp_name.clone();
             download_handles.push(tokio::task::spawn_blocking(move || {
-                (pp_name, download_subscription(&url, with_proxy))
+                if !force_refresh {
+                    if let Some(cached) = load_cached_proxies(&url) {
+                        log::info!("Using cached proxies for {pp_name} ({})", cached.len());
+                        return (pp_name, Ok(cached));
+                    }
+                }
+                match download_subscription(&url, with_proxy) {
+                    Ok(proxies) => {
+                        save_cached_proxies(&url, &proxies);
+                        (pp_name, Ok(proxies))
+                    }
+                    Err(e) => (pp_name, Err(e)),
+                }
             }));
         }
     }
