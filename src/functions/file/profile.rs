@@ -374,13 +374,25 @@ async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
     serde_json::to_writer(file, &profile_content)?;
 
     db::set_current(profile)?;
-    let restart_out = crate::functions::command::restart_core_service(
-        None,
+
+    let is_user = crate::config::CONFIG.cfg_file.singbox.core_service.is_user;
+    let needs_sudo = !is_user;
+
+    #[cfg(feature = "tui")]
+    let password = crate::functions::command::resolve_sudo_password(needs_sudo)
+        .await
+        .map_err(|e| anyhow::anyhow!("{e}"))?;
+
+    #[cfg(not(feature = "tui"))]
+    let password: Option<String> = None;
+
+    let reload_out = crate::functions::command::reload_core_service(
+        password.as_deref(),
         crate::config::CoreType::Singbox,
     )
-    .map_err(|e| anyhow::anyhow!("Config written but service restart failed: {e}"))?;
-    if restart_out.starts_with("Error") {
-        return Err(anyhow::anyhow!("Service restart failed:\n{restart_out}"));
+    .map_err(|e| anyhow::anyhow!("Config written but service reload failed: {e}"))?;
+    if reload_out.starts_with("Error") {
+        return Err(anyhow::anyhow!("Service reload failed:\n{reload_out}"));
     }
     Ok(())
 }

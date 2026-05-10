@@ -43,6 +43,14 @@ static GLOBAL_CHORD_SHORTCUTS: LazyLock<Vec<(KeyCombo, &str)>> = LazyLock::new(|
             KeyCombo(vec![ctrl('g'), plain('m')]),
             "Open clash config dir",
         ),
+        (
+            KeyCombo(vec![ctrl('g'), plain('f')]),
+            "Start core service",
+        ),
+        (
+            KeyCombo(vec![ctrl('g'), plain('t')]),
+            "Close all connections",
+        ),
     ]
 });
 
@@ -205,6 +213,14 @@ impl App {
                             crate::config::CoreType::Singbox => &crate::config::CONFIG.cfg_file.singbox.core.config_dir,
                         };
                         let _ = crate::functions::command::open_dir(dir_str);
+                    }
+                    Some('f') => {
+                        log::debug!("restart core service");
+                        let _ = crate::functions::command::restart_service(None);
+                    }
+                    Some('t') => {
+                        log::debug!("close all connections");
+                        let _ = crate::functions::restful::connection::terminate_all_connections();
                     }
                     _ => {}
                 }
