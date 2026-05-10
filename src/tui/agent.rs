@@ -77,6 +77,18 @@ pub fn get(value: &mut serde_yml::Mapping, idx: &str) -> Result<serde_yml::Mappi
     Ok(map)
 }
 
+pub fn check_duplicate_keys(section: &str, map: &serde_yml::Mapping) {
+    use std::collections::HashSet;
+    let mut seen = HashSet::new();
+    for key in map.keys() {
+        if let Ok(k) = serde_yml::from_value::<crate::tui::Key>(key.clone()) {
+            if !seen.insert(k) {
+                log::warn!("duplicate key `{k}` in [{section}] keymap — later binding overwrites earlier");
+            }
+        }
+    }
+}
+
 #[test]
 fn example() -> anyhow::Result<()> {
     use std::collections::HashMap;
@@ -309,12 +321,40 @@ fn test_default_keymap_parses_and_has_all_sections() -> anyhow::Result<()> {
 }
 
 #[test]
+fn test_no_duplicate_keys_in_default_agents() {
+    use std::collections::HashSet;
+    let mut violations = Vec::new();
+
+    macro_rules! check {
+        ($name:expr, $agent:expr) => {{
+            let agent = $agent;
+            let mut seen = HashSet::new();
+            for key in agent.keys() {
+                if !seen.insert(*key) {
+                    violations.push(format!("{}: duplicate key `{key}`", $name));
+                }
+            }
+        }};
+    }
+
+    check!("connections", crate::tui::tab::connections::agent());
+    check!("file/profile", crate::tui::tab::files::profile::agent());
+    check!("file/template", crate::tui::tab::files::template::agent());
+    check!("srvctl", crate::tui::tab::srvctl::agent());
+    check!("settings", crate::tui::tab::settings::agent());
+    check!("logs", crate::tui::tab::logs::agent());
+
+    if !violations.is_empty() {
+        panic!("duplicate keys in default agents:\n{}", violations.join("\n"));
+    }
+}
+
+#[test]
 fn test_default_keymap_deserializes_all_tabs() -> anyhow::Result<()> {
     use std::collections::HashMap;
     use crate::tui::Key as TuiKey;
 
     let mut value: serde_yml::Mapping = serde_yml::from_str(DEFAULT_KEYMAP_YAML)?;
-    // Remove core-specific sections to match what init() does
     value.remove("mihomo");
     value.remove("sing-box");
 
