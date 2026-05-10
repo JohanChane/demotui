@@ -144,11 +144,19 @@ pub async fn gen_template_singbox(
                         save_cached_proxies(&url, &proxies);
                         (pp_name, Ok(proxies))
                     }
-                    Err(e) => (pp_name, Err(e)),
+                    Err(e) => {
+                        if let Some(cached) = load_cached_proxies(&url) {
+                            log::warn!("Failed to download subscription for {pp_name}: {e}, using cache");
+                            (pp_name, Ok(cached))
+                        } else {
+                            (pp_name, Err(e))
+                        }
+                    }
                 }
             }));
         }
     }
+    let mut download_errors: Vec<String> = Vec::new();
     for handle in download_handles {
         let (pp_name, result) = handle.await?;
         match result {
@@ -175,9 +183,16 @@ pub async fn gen_template_singbox(
                 provider_proxies.insert(pp_name, tagged);
             }
             Err(e) => {
+                download_errors.push(format!("{pp_name}: {e}"));
                 log::warn!("Failed to download subscription for {pp_name}: {e}");
             }
         }
+    }
+    if !download_errors.is_empty() {
+        anyhow::bail!(
+            "Failed to download proxy providers — profile not generated:\n{}",
+            download_errors.join("\n")
+        );
     }
 
     // Apply Set-based cross-provider tag deduplication

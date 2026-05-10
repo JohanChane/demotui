@@ -164,7 +164,7 @@ File/Url Profile 的导入:
 File/Url Profile 的更新:
 -   如果是 Url Profile, 则先更新 profile 的内容。
 -   确保 profile 的文件存放到了 profiles 目录
--   取得 profiles 的网络资源 (proxy-providers 和 rule-providers), 然后更新到 Core Config Dir 的相应目录
+-   取得 profiles 的网络资源 (proxy-providers 和 rule-providers), 然后更新到 Core Config Dir 的相应目录。
 
 File/Url Profile 的选择:
 -   参考配置合并设计
@@ -264,13 +264,16 @@ Template type profile 的生成:
 
 Template type profile 的更新:
 -   下载 clashtui.db 的 proxy_provider_urls 到 proxy-providers 目录 (选择 profile 就是用这里的文件了)
--   为了 mihomo 和 sing-box 的统一, 重新生成 profile
+-   如果 proxy_provider_urls 有一个没有更新成功, 则不生成 profile 文件 (防止生成格式不正常的 profile)
+-   为了 mihomo 和 sing-box 的统一, 重新生成 profile。
 
 Mihomo template type pofile 的选择:
 -   和 File/Url profile 的选择是一样的
 
 sing-box template type pofile 的选择:
 -   和 File/Url profile 的选择是一样的
+
+*防止定入坏的文件格式, profile 和 proxy-provider 写到文件之前, 需要用 core 测试一下, 成功才写入。*
 
 ## sing-box 的模板例子
 

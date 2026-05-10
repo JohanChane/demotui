@@ -322,10 +322,12 @@ pub async fn update_profile_without_pp(
                         }
                         if !pp_path.is_empty() {
                             let dest = cfg_dir.join(&pp_path);
-                            if let Some(parent) = dest.parent() {
-                                let _ = std::fs::create_dir_all(parent);
+                            if serde_yml::from_slice::<serde_yml::Mapping>(&buf).is_ok() {
+                                if let Some(parent) = dest.parent() {
+                                    let _ = std::fs::create_dir_all(parent);
+                                }
+                                let _ = std::fs::write(&dest, &buf);
                             }
-                            let _ = std::fs::write(&dest, &buf);
                         }
                         let yaml = serde_yml::from_slice::<serde_yml::Mapping>(&buf).map_err(|e| e.to_string());
                         (pp_name_clone, url, pp_path, yaml)
@@ -546,6 +548,9 @@ pub async fn fetch_net_resource_statuses(
                             return (name, url, path, section, false, Some(e.to_string()));
                         }
                     }
+                    if serde_yml::from_slice::<serde_yml::Mapping>(&buf).is_err() {
+                        return (name, url, path, section, false, Some("Invalid YAML format".to_string()));
+                    }
                     match std::fs::write(&path, &buf) {
                         Ok(()) => (name, url, path, section, true, None),
                         Err(e) => (name, url, path, section, false, Some(e.to_string())),
@@ -693,6 +698,9 @@ pub async fn fetch_net_resource_statuses_from_resources(
                         if let Err(e) = std::fs::create_dir_all(parent) {
                             return (name, url, path, section, false, Some(e.to_string()));
                         }
+                    }
+                    if serde_yml::from_slice::<serde_yml::Mapping>(&buf).is_err() {
+                        return (name, url, path, section, false, Some("Invalid YAML format".to_string()));
                     }
                     match std::fs::write(&path, &buf) {
                         Ok(()) => (name, url, path, section, true, None),
