@@ -80,9 +80,9 @@
       "type": "selector",
       "tag": "Entry",
       "outbounds": [
-        "${Auto}",
-        "${Select}",
-        "${pvd}"
+        "${PGG.Auto}",
+        "${PGG.Select}",
+        "${PPG.pvd}"
       ],
       "default": "Auto-pvd"
     },
@@ -90,7 +90,7 @@
       "type": "urltest",
       "tag": "Auto",
       "expand_group_with": [
-        "${pvd}"
+        "${PPG.pvd}"
       ],
       "url": "https://www.gstatic.com/generate_204",
       "interval": "5m",
@@ -100,7 +100,7 @@
       "type": "urltest",
       "tag": "Select",
       "expand_group_with": [
-        "${pvd}"
+        "${PPG.pvd}"
       ],
       "url": "https://www.gstatic.com/generate_204",
       "interval": "5m",

@@ -3,6 +3,7 @@ use serde_json::Value as JsonValue;
 use std::path::PathBuf;
 
 use crate::config::database::ProxyProviderGroups;
+use super::resolve_template_placeholder;
 
 fn proxy_provider_cache_path(url: &str) -> PathBuf {
     let hash = format!("{:x}", md5::compute(url.as_bytes()));
@@ -103,22 +104,14 @@ fn dedup_singbox_proxy_tags(
     result
 }
 
-/// Strip `${}` wrapper from a placeholder string. Returns the inner key.
-fn resolve_placeholder(s: &str) -> Option<&str> {
-    if s.starts_with("${") && s.ends_with('}') {
-        Some(&s[2..s.len() - 1])
-    } else {
-        None
-    }
-}
-
 /// Expand a sing-box JSON template into a complete sing-box JSON config.
 ///
 /// The template is a full sing-box JSON config with template markers in `outbounds`:
-/// - `"expand_group_with": ["${group_name}"]` on an outbound marks it for expansion
+/// - `"expand_group_with": ["${PPG.<group>}"]` on an outbound marks it for expansion
 ///   (one copy per proxy-provider in the group, each named `<tag>-<provider_name>`)
-/// - `"${group_name}"` in `outbounds` lists expands to all proxy-provider names in that group
-/// - `"${TagName}"` in `outbounds` lists expands to all expanded group names starting with `TagName-`
+/// - `"${PPG.<group>}"` in `outbounds` lists expands to all proxy-provider names in that group
+/// - `"${PPG.<group>.<provider>}"` expands to a specific provider name
+/// - `"${PGG.<name>}"` in `outbounds` lists expands to all generated group tags matching `<name>`
 ///
 /// Other sections (dns, inbounds, route, experimental, log) pass through unchanged.
 /// If the template includes `rules` / `rule-providers` (mihomo-style), they are
@@ -221,6 +214,49 @@ pub async fn gen_template_singbox(
     let mut new_outbounds: Vec<JsonValue> = Vec::new();
     let mut pg_names: HashMap<String, Vec<String>> = HashMap::new();
 
+    // --- First pass: process expand_group_with outbounds to populate pg_names ---
+    for ob in &tpl_outbounds {
+        if ob.get("expand_group_with").is_none() {
+            continue;
+        }
+
+        let expand_keys = ob["expand_group_with"]
+            .as_array()
+            .context("expand_group_with must be an array")?;
+
+        let group_tag = ob
+            .get("tag")
+            .and_then(|v| v.as_str())
+            .context("expand_group_with outbound must have a tag")?;
+
+        for the_expand_key in expand_keys {
+            let pk_str = the_expand_key
+                .as_str()
+                .context("expand_group_with entries must be strings")?;
+            let provider_names = resolve_template_placeholder(pk_str, &pg_names, groups)?;
+
+            for pp_name in &provider_names {
+                let tags = pp_tags
+                    .get(pp_name)
+                    .cloned()
+                    .unwrap_or_default();
+
+                // Skip empty providers
+                if tags.is_empty() {
+                    continue;
+                }
+
+                let new_tag = format!("{group_tag}-{pp_name}");
+
+                pg_names
+                    .entry(group_tag.to_string())
+                    .or_default()
+                    .push(new_tag);
+            }
+        }
+    }
+
+    // --- Second pass: emit all outbounds with placeholders resolved ---
     for ob in tpl_outbounds {
         let has_expand = ob.get("expand_group_with").is_some();
 
@@ -250,16 +286,11 @@ pub async fn gen_template_singbox(
                 let pk_str = the_expand_key
                     .as_str()
                     .context("expand_group_with entries must be strings")?;
-                let group_key = resolve_placeholder(pk_str).unwrap_or(pk_str);
+                let provider_names = resolve_template_placeholder(pk_str, &pg_names, groups)?;
 
-                let group_providers: Vec<&str> = groups
-                    .get(group_key)
-                    .map(|providers| providers.keys().map(|s| s.as_str()).collect())
-                    .unwrap_or_default();
-
-                for pp_name in &group_providers {
+                for pp_name in &provider_names {
                     let tags = pp_tags
-                        .get(*pp_name)
+                        .get(pp_name)
                         .cloned()
                         .unwrap_or_default();
 
@@ -294,11 +325,6 @@ pub async fn gen_template_singbox(
                         sb_group["interrupt_exist_connections"] = interrupt.clone();
                     }
 
-                    pg_names
-                        .entry(group_tag.to_string())
-                        .or_default()
-                        .push(new_tag);
-
                     new_outbounds.push(sb_group);
                 }
             }
@@ -309,22 +335,15 @@ pub async fn gen_template_singbox(
                 let mut resolved: Vec<String> = Vec::new();
                 for item in outbounds_arr {
                     let item_str = item.as_str().unwrap_or("");
-                    if let Some(key) = resolve_placeholder(item_str) {
-                        // Check if key matches an expanded group → use generated group names
-                        if let Some(group_names) = pg_names.get(key) {
-                            resolved.extend(group_names.clone());
-                        }
-                        // Check if key matches a proxy-provider group → expand to proxy tags
-                        if let Some(prov_group) = groups.get(key) {
-                            for name in prov_group.keys() {
-                                if let Some(tags) = pp_tags.get(name) {
-                                    resolved.extend(tags.clone());
-                                }
+                    if item_str.starts_with("${") && item_str.ends_with('}') {
+                        let names = resolve_template_placeholder(item_str, &pg_names, groups)
+                            .with_context(|| format!("Can't resolve placeholder in outbounds: {item_str}"))?;
+                        for name in names {
+                            if let Some(tags) = pp_tags.get(&name) {
+                                resolved.extend(tags.clone());
+                            } else {
+                                resolved.push(name);
                             }
-                        }
-                        // Also check pp_tags for direct match
-                        if let Some(tags) = pp_tags.get(key) {
-                            resolved.extend(tags.clone());
                         }
                     } else {
                         resolved.push(item_str.to_string());

@@ -1,7 +1,63 @@
 use super::{MAX_SUPPORTED_TEMPLATE_VERSION, PROFILE_JSONS_PATH, PROFILE_YAMLS_PATH, TEMPLATE_PATH};
-use crate::config::database::ProfileType;
-use anyhow::Context as _;
+use crate::config::database::{ProfileType, ProxyProviderGroups};
+use anyhow::{Context as _, bail};
 use std::collections::{HashMap, HashSet};
+
+/// Resolve a `${...}` template placeholder using domain-prefixed syntax.
+///
+/// Two domains are supported:
+/// - `PPG.<group>` or `PPG.<group>.<provider>` — proxy-provider group lookup in `ppg_data`
+/// - `PGG.<name>` — proxy-group group lookup in `pg_names`
+///
+/// Returns the resolved names/tags as a Vec (may be multiple for group-level refs).
+pub fn resolve_template_placeholder(
+    value: &str,
+    pg_names: &HashMap<String, Vec<String>>,
+    ppg_data: &ProxyProviderGroups,
+) -> anyhow::Result<Vec<String>> {
+    let inner = if value.starts_with("${") && value.ends_with('}') {
+        &value[2..value.len() - 1]
+    } else {
+        bail!("Template placeholder must be wrapped in ${{}}: {value}");
+    };
+
+    let (domain, path) = inner
+        .split_once('.')
+        .map(|(d, p)| (d, p.to_string()))
+        .unwrap_or_else(|| (inner, String::new()));
+
+    match domain {
+        "PPG" => {
+            if path.is_empty() {
+                bail!("PPG placeholder requires a group name: ${{PPG.<group>}}");
+            }
+            let mut parts: Vec<&str> = path.split('.').collect();
+            let group_name = parts.remove(0);
+            let providers = ppg_data
+                .get(group_name)
+                .with_context(|| format!("PPG group '{group_name}' not found in proxy-provider groups"))?;
+
+            if let Some(provider_name) = parts.first() {
+                providers
+                    .get(*provider_name)
+                    .with_context(|| format!("Provider '{provider_name}' not found in PPG group '{group_name}'"))?;
+                Ok(vec![provider_name.to_string()])
+            } else {
+                Ok(providers.keys().cloned().collect())
+            }
+        }
+        "PGG" => {
+            if path.is_empty() {
+                bail!("PGG placeholder requires a template name: ${{PGG.<name>}}");
+            }
+            let names = pg_names
+                .get(&path)
+                .with_context(|| format!("PGG template '{path}' not found in generated proxy-group names"))?;
+            Ok(names.clone())
+        }
+        _ => bail!("Unknown domain prefix '{domain}' in template placeholder. Expected PPG or PGG"),
+    }
+}
 
 mod version1;
 pub mod singbox;
@@ -527,6 +583,86 @@ pub async fn fetch_net_resource_statuses(
     }
 
     statuses
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    fn make_ppg() -> ProxyProviderGroups {
+        let mut groups = ProxyProviderGroups::new();
+        let mut providers = std::collections::BTreeMap::new();
+        providers.insert("pvd0".to_string(), "https://example.com/sub1.yaml".to_string());
+        providers.insert("pvd1".to_string(), "https://example.com/sub2.yaml".to_string());
+        groups.insert("pvd".to_string(), providers);
+        groups
+    }
+
+    #[test]
+    fn test_resolve_ppg_group() {
+        let ppg = make_ppg();
+        let pg_names = HashMap::new();
+        let result = resolve_template_placeholder("${PPG.pvd}", &pg_names, &ppg).unwrap();
+        assert_eq!(result, vec!["pvd0", "pvd1"]);
+    }
+
+    #[test]
+    fn test_resolve_ppg_specific_provider() {
+        let ppg = make_ppg();
+        let pg_names = HashMap::new();
+        let result = resolve_template_placeholder("${PPG.pvd.pvd0}", &pg_names, &ppg).unwrap();
+        assert_eq!(result, vec!["pvd0"]);
+    }
+
+    #[test]
+    fn test_resolve_pgg() {
+        let ppg = make_ppg();
+        let mut pg_names = HashMap::new();
+        pg_names.insert("auto".to_string(), vec!["auto-pvd0".to_string(), "auto-pvd1".to_string()]);
+        let result = resolve_template_placeholder("${PGG.auto}", &pg_names, &ppg).unwrap();
+        assert_eq!(result, vec!["auto-pvd0", "auto-pvd1"]);
+    }
+
+    #[test]
+    fn test_resolve_unknown_domain() {
+        let ppg = make_ppg();
+        let pg_names = HashMap::new();
+        let result = resolve_template_placeholder("${XYZ.thing}", &pg_names, &ppg);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_missing_group() {
+        let ppg = make_ppg();
+        let pg_names = HashMap::new();
+        let result = resolve_template_placeholder("${PPG.nonexistent}", &pg_names, &ppg);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_missing_pgg_template() {
+        let ppg = make_ppg();
+        let pg_names = HashMap::new();
+        let result = resolve_template_placeholder("${PGG.nonexistent}", &pg_names, &ppg);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_missing_ppg_provider() {
+        let ppg = make_ppg();
+        let pg_names = HashMap::new();
+        let result = resolve_template_placeholder("${PPG.pvd.nonexistent}", &pg_names, &ppg);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_resolve_ppg_missing_group_name() {
+        let ppg = make_ppg();
+        let pg_names = HashMap::new();
+        let result = resolve_template_placeholder("${PPG}", &pg_names, &ppg);
+        assert!(result.is_err());
+    }
 }
 
 pub async fn fetch_net_resource_statuses_from_resources(

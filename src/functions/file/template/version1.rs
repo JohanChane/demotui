@@ -1,7 +1,7 @@
 use anyhow::Context;
 use crate::config::database::ProxyProviderGroups;
 
-use super::{PROXY_GROUPS, PROXY_PROVIDERS};
+use super::{PROXY_GROUPS, PROXY_PROVIDERS, resolve_template_placeholder};
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Clone)]
 struct PGitem {
@@ -41,7 +41,6 @@ pub(super) fn gen_template_with_urls(
     let mut out_parsed_yaml = tpl.clone();
 
     // ## proxy-providers
-    let mut pp_names: HashMap<String, Vec<String>> = HashMap::new();
     let mut new_proxy_providers = serde_yml::Mapping::new();
     let pp_mapping = if let Some(serde_yml::Value::Mapping(pp_mapping)) = tpl.get(PROXY_PROVIDERS) {
         pp_mapping
@@ -69,10 +68,6 @@ pub(super) fn gen_template_with_urls(
                 let mut new_pp = pp.clone();
                 new_pp.remove("tpl_param");
                 let the_pp_name = name.clone();
-                pp_names
-                    .entry(pp_key_str.to_string())
-                    .or_default()
-                    .push(the_pp_name.clone());
 
                 new_pp.insert(
                     serde_yml::Value::String("url".into()),
@@ -132,18 +127,7 @@ pub(super) fn gen_template_with_urls(
             } else {
                 anyhow::bail!("Failed to parse string in `expand_group_with`")
             };
-            // Parse ${group_name} from the key
-            let the_pk_str = if the_pk_str.starts_with("${") && the_pk_str.ends_with('}') {
-                &the_pk_str[2..the_pk_str.len()-1]
-            } else {
-                the_pk_str
-            };
-
-            let names = if let Some(names) = pp_names.get(the_pk_str) {
-                names
-            } else {
-                continue;
-            };
+            let names = resolve_template_placeholder(the_pk_str, &pg_names, groups)?;
 
             let the_pg_name =
                 if let Some(serde_yml::Value::String(the_pg_name)) = the_pg_value.get("name") {
@@ -192,11 +176,10 @@ pub(super) fn gen_template_with_urls(
                     .as_str()
                     .with_context(|| "Non-string value in `use` list")?;
                 if p_str.starts_with("${") && p_str.ends_with('}') {
-                    let key = &p_str[2..p_str.len()-1];
-                    let provider_names = pp_names
-                        .get(key)
-                        .with_context(|| "Can't find the proxy-provider group name.")?;
-                    new_providers.extend(provider_names.iter().cloned());
+                    new_providers.extend(
+                        resolve_template_placeholder(p_str, &pg_names, groups)
+                            .with_context(|| format!("Can't resolve placeholder in `use`: {p_str}"))?
+                    );
                 } else {
                     new_providers.push(p_str.to_string());
                 }
@@ -209,18 +192,17 @@ pub(super) fn gen_template_with_urls(
             );
         }
 
-        if let Some(serde_yml::Value::Sequence(groups)) = the_pg_seq.get("proxies") {
+        if let Some(serde_yml::Value::Sequence(proxies_list)) = the_pg_seq.get("proxies") {
             let mut new_groups = Vec::new();
-            for g in groups {
+            for g in proxies_list {
                 let g_str = g
                     .as_str()
                     .with_context(|| "Non-string value in `proxies` list")?;
                 if g_str.starts_with("${") && g_str.ends_with('}') {
-                    let key = &g_str[2..g_str.len()-1];
-                    let group_names = pg_names
-                        .get(key)
-                        .with_context(|| "Can't find the proxy-group name.")?;
-                    new_groups.extend(group_names.iter().cloned());
+                    new_groups.extend(
+                        resolve_template_placeholder(g_str, &pg_names, groups)
+                            .with_context(|| format!("Can't resolve placeholder in `proxies`: {g_str}"))?
+                    );
                 } else {
                     new_groups.push(g_str.to_string());
                 }
@@ -241,7 +223,6 @@ pub(super) fn gen_template_with_urls(
 mod tests {
     use super::*;
     use crate::config::database::ProxyProviderGroups;
-    use std::collections::HashMap;
 
     fn testdata_path(name: &str) -> std::path::PathBuf {
         let manifest_dir = std::env!("CARGO_MANIFEST_DIR");
@@ -521,9 +502,47 @@ mod tests {
         let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
         // pvd has tpl_param but no matching group → no providers generated
         // Auto needs pvd → no groups generated
-        // Select has ${Auto} placeholder → unresolvable, must error
+        // Select has ${PGG.Auto} placeholder → unresolvable, must error
         let groups = ProxyProviderGroups::new();
         let result = gen_template_with_urls(tpl, "simple_tpl", &groups);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_ppg_nonexistent_group() {
+        let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
+        let groups = make_groups("other", &["https://example.com/sub1.yaml"]);
+        // simple_tpl.yaml has ${PPG.pvd} but only "other" group exists
+        let result = gen_template_with_urls(tpl, "simple_tpl", &groups);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bare_placeholder_without_domain_prefix() {
+        // Create a truly bare placeholder (no domain prefix) inline:
+        use serde_yml::Value;
+        let mut mapping = serde_yml::Mapping::new();
+
+        let mut pp_mapping = serde_yml::Mapping::new();
+        pp_mapping.insert(Value::String("pvd".into()), serde_yml::to_value(serde_yml::Mapping::from_iter([
+            (Value::String("tpl_param".into()), Value::Null),
+            (Value::String("type".into()), Value::String("http".into())),
+            (Value::String("url".into()), Value::String("https://example.com/sub1.yaml".into())),
+        ])).unwrap());
+        mapping.insert(Value::String(PROXY_PROVIDERS.into()), Value::Mapping(pp_mapping));
+
+        mapping.insert(Value::String(PROXY_GROUPS.into()), Value::Sequence(vec![
+            serde_yml::to_value(serde_yml::Mapping::from_iter([
+                (Value::String("name".into()), Value::String("Direct".into())),
+                (Value::String("type".into()), Value::String("select".into())),
+                (Value::String("proxies".into()), Value::Sequence(vec![
+                    Value::String("${bare}".into()),
+                ])),
+            ])).unwrap(),
+        ]));
+
+        let groups = make_groups("pvd", &["https://example.com/sub1.yaml"]);
+        let result = gen_template_with_urls(mapping, "test", &groups);
         assert!(result.is_err());
     }
 }

@@ -9,10 +9,10 @@ proxy-groups:
     type: select
     proxies:
       - DIRECT
-      - ${NonExistent}
+      - ${PGG.NonExistent}
   - name: Auto
     type: url-test
     expand_group_with:
-      - ${pvd}
+      - ${PPG.pvd}
     url: https://www.gstatic.com/generate_204
     interval: 300
