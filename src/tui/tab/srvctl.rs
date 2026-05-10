@@ -240,18 +240,9 @@ impl TabContent for SrvCtlContent {
                 let needs_sudo = !self.is_user;
 
                 async move {
-                    let password = if needs_sudo {
-                        let pw = tri!(
-                            InputMasked::new()
-                                .with_title("Sudo Password".to_owned())
-                                .with_prompt("Sudo password (empty if NOPASSWD):".to_owned())
-                                .build_and_send()
-                                .await,
-                            or_cancel
-                        );
-                        Some(pw)
-                    } else {
-                        None
+                    let password = match crate::functions::command::resolve_sudo_password(needs_sudo).await {
+                        Ok(pw) => pw,
+                        Err(_) => return do_nothing(),
                     };
 
                     macro_rules! handle {

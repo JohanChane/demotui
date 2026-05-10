@@ -26,6 +26,8 @@ pub struct CoreConfig {
 #[serde(default)]
 pub struct CoreServiceConfig {
     pub service_name: String,
+    /// Controls --user flag (systemd user service) and whether sudo prefix is needed.
+    /// When false, `sudo -n true` is used to detect NOPASSWD and skip password prompt.
     pub is_user: bool,
 }
 
