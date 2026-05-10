@@ -1,5 +1,6 @@
 use super::dev::*;
-use crate::functions::restful::{api_log, config};
+use crate::functions::command;
+use crate::functions::restful::config;
 use ratatui::text::Line;
 use ratatui::widgets::{List, ListItem};
 
@@ -57,7 +58,19 @@ impl TryFrom<&crate::tui::Key> for Key {
 
 const MAX_BUFFER_LINES: usize = 10000;
 
-#[derive(Default)]
+impl Default for Logs {
+    fn default() -> Self {
+        Self {
+            lines: Vec::new(),
+            scroll: 0,
+            error: None,
+            filter: None,
+            paused: true,
+            current_log_level: String::new(),
+        }
+    }
+}
+
 struct Logs {
     lines: Vec<String>,
     scroll: usize,
@@ -83,7 +96,7 @@ impl BasicTabContent for Logs {
         }
         async {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-            let text = tri!(api_log::get_logs(), or_set);
+            let text = command::get_logs();
             wrapper(move |content: &mut Self| {
                 content.error = None;
                 for line in text.lines() {
@@ -107,7 +120,7 @@ impl BasicTabContent for Logs {
 
 impl TabContent for Logs {
     fn init(&mut self, task_set: &mut FutureSet<Self>, _state: &mut Self::State) {
-        self.error = Some("Loading logs...".to_owned());
+        self.error = Some("Press p to start capturing logs".to_owned());
         // Fetch initial log level
         async {
             let cfg = tri!(config::fetch(), or_set);
@@ -123,7 +136,7 @@ impl TabContent for Logs {
         .spawn_at(task_set);
         // Fetch initial logs
         async {
-            let text = tri!(api_log::get_logs(), or_set);
+            let text = command::get_logs();
             wrapper(move |content: &mut Self| {
                 for line in text.lines() {
                     content.lines.push(line.to_owned());
@@ -342,9 +355,9 @@ mod tests {
     }
 
     #[test]
-    fn default_logs_is_paused_false() {
+    fn default_logs_is_paused_true() {
         let logs = Logs::default();
-        assert!(!logs.paused);
+        assert!(logs.paused, "log capture should be paused by default");
     }
 
     #[test]
@@ -378,11 +391,11 @@ mod tests {
     #[test]
     fn toggle_pause_flips_state() {
         let mut logs = Logs::default();
+        assert!(logs.paused, "default is paused");
+        logs.paused = false;
         assert!(!logs.paused);
         logs.paused = true;
         assert!(logs.paused);
-        logs.paused = false;
-        assert!(!logs.paused);
     }
 
     #[test]
