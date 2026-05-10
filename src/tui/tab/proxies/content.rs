@@ -1,7 +1,6 @@
 use super::super::dev::*;
 use crate::functions::restful::proxies::{self};
 use indexmap::IndexMap;
-use std::cell::Cell;
 use std::time::Instant;
 
 use super::tree::{NodeType, ProxyTree};
@@ -12,7 +11,6 @@ pub struct Proxies {
     pub proxies: IndexMap<String, crate::functions::restful::proxies::Proxy>,
     pub error: Option<String>,
     pub testing_since: Option<Instant>,
-    pub jump_target: Cell<Option<usize>>,
 }
 
 impl Proxies {
@@ -114,13 +112,6 @@ impl Proxies {
                 }
             }
             super::Key::TestAllDelay => self.test_all_delay(task_set),
-            super::Key::FzfFind => {
-                let items: Vec<(String, usize)> = self.tree.nodes.iter()
-                    .enumerate()
-                    .map(|(i, n)| (n.name.clone(), i))
-                    .collect();
-                self.fzf_find(items, task_set);
-            }
         }
     }
 }
@@ -173,11 +164,6 @@ impl TabContent for Proxies {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State) {
-        if let Some(idx) = self.jump_target.take() {
-            if idx < self.tree.len() {
-                state.select(Some(idx));
-            }
-        }
         super::render::render(self, f, area, state);
     }
 }

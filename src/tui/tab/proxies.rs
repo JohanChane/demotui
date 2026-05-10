@@ -26,7 +26,6 @@ mod_agent!(
         ([KeyCode::Char('t')], Key::TestDelay, "Test delay"),
         ([KeyCode::Char('a'), KeyCode::Char('t')], Key::TestAllDelay, "Test all delay"),
         ([KeyCode::Char('r')], Key::Refresh, "Refresh"),
-        ([KeyCode::Char('f')], Key::FzfFind, "Fuzzy find proxy"),
     ]
 );
 
@@ -45,7 +44,6 @@ pub enum Key {
     TestDelay,
     TestAllDelay,
     Refresh,
-    FzfFind,
 }
 
 impl TryFrom<&crate::tui::Key> for Key {
