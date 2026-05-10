@@ -5,8 +5,7 @@ pub fn init() -> Result<()> {
     let path = crate::config::keymap_path();
 
     if !path.exists() {
-        log::debug!("Skip loading keymap");
-        return Ok(());
+        generate_default_keymap(&path)?;
     }
 
     let file = std::fs::File::open(path)?;
@@ -22,6 +21,16 @@ pub fn init() -> Result<()> {
 
     Ok(())
 }
+
+fn generate_default_keymap(path: &std::path::Path) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, DEFAULT_KEYMAP_YAML)?;
+    Ok(())
+}
+
+const DEFAULT_KEYMAP_YAML: &str = include_str!("keymap_default.yaml");
 
 fn split_sections(
     value: &mut serde_yml::Mapping,
@@ -167,4 +176,185 @@ common:
     assert!(mihomo.is_some());
     assert!(!value.contains_key("mihomo"), "mihomo should be removed");
     assert!(value.contains_key("common"), "common should remain");
+}
+
+#[test]
+fn test_profile_key_deserialization_string_variants() -> anyhow::Result<()> {
+    use std::collections::HashMap;
+    use crate::tui::Key as TuiKey;
+    use crate::tui::tab::files::profile::Key;
+
+    let yaml = r#"
+? code: Enter
+  shift: false
+  ctrl: false
+  alt: false
+  super_: false
+: Select
+? code: Up
+  shift: false
+  ctrl: false
+  alt: false
+  super_: false
+: MoveUp
+? code: Down
+  shift: false
+  ctrl: false
+  alt: false
+  super_: false
+: MoveDown
+"#;
+    let value: serde_yml::Mapping = serde_yml::from_str(yaml)?;
+    let keymap: HashMap<TuiKey, Key> =
+        serde_yml::from_value(serde_yml::Value::Mapping(value))?;
+    assert_eq!(keymap.len(), 3);
+    Ok(())
+}
+
+#[test]
+fn test_profile_key_with_action_mapping_no_crash() -> anyhow::Result<()> {
+    use std::collections::HashMap;
+    use crate::tui::Key as TuiKey;
+    use crate::tui::tab::files::profile::Key;
+
+    let yaml = r#"
+? code: !Char e
+  shift: false
+  ctrl: false
+  alt: false
+  super_: false
+: Action: Edit
+? code: !Char i
+  shift: false
+  ctrl: false
+  alt: false
+  super_: false
+: Action: Add
+"#;
+    let value: serde_yml::Mapping = serde_yml::from_str(yaml)?;
+    let keymap: HashMap<TuiKey, Key> =
+        serde_yml::from_value(serde_yml::Value::Mapping(value))?;
+    assert_eq!(keymap.len(), 2);
+    let e_key = TuiKey {
+        code: crossterm::event::KeyCode::Char('e'),
+        shift: false,
+        ctrl: false,
+        alt: false,
+        super_: false,
+    };
+    let i_key = TuiKey {
+        code: crossterm::event::KeyCode::Char('i'),
+        shift: false,
+        ctrl: false,
+        alt: false,
+        super_: false,
+    };
+    assert!(matches!(keymap.get(&e_key), Some(Key::Action(_))));
+    assert!(matches!(keymap.get(&i_key), Some(Key::Action(_))));
+    Ok(())
+}
+
+#[test]
+fn test_template_key_deserialization() -> anyhow::Result<()> {
+    use std::collections::HashMap;
+    use crate::tui::Key as TuiKey;
+    use crate::tui::tab::files::template::Key;
+
+    let yaml = r#"
+? code: Enter
+  shift: false
+  ctrl: false
+  alt: false
+  super_: false
+: Action: Generate
+? code: Left
+  shift: false
+  ctrl: false
+  alt: false
+  super_: false
+: Switch
+"#;
+    let value: serde_yml::Mapping = serde_yml::from_str(yaml)?;
+    let keymap: HashMap<TuiKey, Key> =
+        serde_yml::from_value(serde_yml::Value::Mapping(value))?;
+    assert_eq!(keymap.len(), 2);
+    let enter_key = TuiKey {
+        code: crossterm::event::KeyCode::Enter,
+        shift: false,
+        ctrl: false,
+        alt: false,
+        super_: false,
+    };
+    assert!(matches!(keymap.get(&enter_key), Some(Key::Action(_))));
+    Ok(())
+}
+
+#[test]
+fn test_default_keymap_parses_and_has_all_sections() -> anyhow::Result<()> {
+    let value: serde_yml::Mapping = serde_yml::from_str(DEFAULT_KEYMAP_YAML)?;
+    assert!(value.contains_key("connections"));
+    assert!(value.contains_key("file"));
+    assert!(value.contains_key("srvctl"));
+    assert!(value.contains_key("settings"));
+    assert!(value.contains_key("logs"));
+
+    // Verify the file section contains profile and template subsections
+    let file = value
+        .get("file")
+        .and_then(|v| v.as_mapping())
+        .expect("file should be a mapping");
+    assert!(file.contains_key("profile"));
+    assert!(file.contains_key("template"));
+    Ok(())
+}
+
+#[test]
+fn test_default_keymap_deserializes_all_tabs() -> anyhow::Result<()> {
+    use std::collections::HashMap;
+    use crate::tui::Key as TuiKey;
+
+    let mut value: serde_yml::Mapping = serde_yml::from_str(DEFAULT_KEYMAP_YAML)?;
+    // Remove core-specific sections to match what init() does
+    value.remove("mihomo");
+    value.remove("sing-box");
+
+    // connections
+    {
+        let conns = get(&mut value.clone(), "connections")?;
+        let _km: HashMap<TuiKey, crate::tui::tab::connections::Key> =
+            serde_yml::from_value(serde_yml::Value::Mapping(conns))?;
+    }
+    // srvctl
+    {
+        let srv = get(&mut value.clone(), "srvctl")?;
+        let _km: HashMap<TuiKey, crate::tui::tab::srvctl::SrvCtlKey> =
+            serde_yml::from_value(serde_yml::Value::Mapping(srv))?;
+    }
+    // settings
+    {
+        let sett = get(&mut value.clone(), "settings")?;
+        let _km: HashMap<TuiKey, crate::tui::tab::settings::SettingsKey> =
+            serde_yml::from_value(serde_yml::Value::Mapping(sett))?;
+    }
+    // logs
+    {
+        let lgs = get(&mut value.clone(), "logs")?;
+        let _km: HashMap<TuiKey, crate::tui::tab::logs::Key> =
+            serde_yml::from_value(serde_yml::Value::Mapping(lgs))?;
+    }
+    // file/profile
+    {
+        let file = get(&mut value.clone(), "file")?;
+        let profile = get(&mut file.clone(), "profile")?;
+        let _km: HashMap<TuiKey, crate::tui::tab::files::profile::Key> =
+            serde_yml::from_value(serde_yml::Value::Mapping(profile))?;
+    }
+    // file/template
+    {
+        let file = get(&mut value.clone(), "file")?;
+        let tmpl = get(&mut file.clone(), "template")?;
+        let _km: HashMap<TuiKey, crate::tui::tab::files::template::Key> =
+            serde_yml::from_value(serde_yml::Value::Mapping(tmpl))?;
+    }
+    Ok(())
 }

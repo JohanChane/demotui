@@ -32,8 +32,8 @@ macro_rules! get_name {
     };
 }
 
-mod profile;
-mod template;
+pub(crate) mod profile;
+pub(crate) mod template;
 
 newtype_tab!(
     /// This can only be [DualTab], because [Template] needs to update [Profile]

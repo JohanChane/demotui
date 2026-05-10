@@ -183,12 +183,12 @@ pub trait TuiTab: super::TuiWidget {
     fn dispatch_shortcut(&mut self, seq: &[crate::tui::Key]);
 }
 
-mod connections;
-mod files;
-mod logs;
+pub(crate) mod connections;
+pub(crate) mod files;
+pub(crate) mod logs;
 mod proxies;
-mod settings;
-mod srvctl;
+pub(crate) mod settings;
+pub(crate) mod srvctl;
 mod status;
 
 macro_rules! enum_dispatch {

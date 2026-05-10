@@ -114,7 +114,7 @@ mod_agent!(
     ]
 );
 
-#[derive(Clone, Copy, serde::Deserialize)]
+#[derive(Clone, Copy)]
 pub enum Key {
     Switch,
     MoveUp,
@@ -122,6 +122,71 @@ pub enum Key {
     Select,
 
     Action(Action),
+}
+
+impl<'de> serde::Deserialize<'de> for Key {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::de::{self, Visitor};
+        use std::fmt;
+
+        struct KeyVisitor;
+
+        impl<'de> Visitor<'de> for KeyVisitor {
+            type Value = Key;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                f.write_str("a string (unit variant) or mapping (Action: <name>)")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Key, E> {
+                match v {
+                    "Switch" => Ok(Key::Switch),
+                    "MoveUp" => Ok(Key::MoveUp),
+                    "MoveDown" => Ok(Key::MoveDown),
+                    "Select" => Ok(Key::Select),
+                    s => Err(de::Error::unknown_variant(s, &["Switch", "MoveUp", "MoveDown", "Select", "Action: ..."])),
+                }
+            }
+
+            fn visit_map<M: de::MapAccess<'de>>(self, mut map: M) -> Result<Key, M::Error> {
+                let k: String = map.next_key()?
+                    .ok_or_else(|| de::Error::missing_field("variant"))?;
+                if k == "Action" {
+                    let v: String = map.next_value()?;
+                    match v.as_str() {
+                        "Add" => Ok(Key::Action(Action::Add)),
+                        "ImportFile" => Ok(Key::Action(Action::ImportFile)),
+                        "Delete" => Ok(Key::Action(Action::Delete)),
+                        "Edit" => Ok(Key::Action(Action::Edit)),
+                        "Preview" => Ok(Key::Action(Action::Preview)),
+                        "Update" => Ok(Key::Action(Action::Update)),
+                        "UpdateAll" => Ok(Key::Action(Action::UpdateAll)),
+                        "Search" => Ok(Key::Action(Action::Search)),
+                        "Test" => Ok(Key::Action(Action::Test)),
+                        "Check" => Ok(Key::Action(Action::Check)),
+                        "FzfFind" => Ok(Key::Action(Action::FzfFind)),
+                        "GoTop" => Ok(Key::Action(Action::GoTop)),
+                        "GoEnd" => Ok(Key::Action(Action::GoEnd)),
+                        "ToggleNoPp" => Ok(Key::Action(Action::ToggleNoPp)),
+                        "TrafficNext" => Ok(Key::Action(Action::TrafficNext)),
+                        "TrafficPrev" => Ok(Key::Action(Action::TrafficPrev)),
+                        s => Err(de::Error::unknown_variant(s, &[
+                            "Add", "Edit", "Delete", "Preview", "Update", "UpdateAll",
+                            "Search", "Test", "Check", "FzfFind", "GoTop", "GoEnd",
+                            "ToggleNoPp", "TrafficNext", "TrafficPrev",
+                        ])),
+                    }
+                } else {
+                    Err(de::Error::unknown_field(&k, &["Action"]))
+                }
+            }
+        }
+
+        deserializer.deserialize_any(KeyVisitor)
+    }
 }
 
 #[derive(Clone, Copy, serde::Deserialize)]
