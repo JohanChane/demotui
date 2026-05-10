@@ -108,7 +108,7 @@ mod_agent!(
         ([KeyCode::Char('f')], Key::Action(Action::FzfFind), "Find profile"),
         ([KeyCode::Char('g'), KeyCode::Char('g')], Key::Action(Action::GoTop), "Go to top"),
         ([KeyCode::Char('G')], Key::Action(Action::GoEnd), "Go to end"),
-        ([KeyCode::Char('N')], Key::Action(Action::ToggleNoPp), "Toggle no proxy-provider"),
+        (key("P"), Key::Action(Action::ToggleNoPp), "Toggle no proxy-provider"),
         (key("n"), Key::Action(Action::TrafficNext), "Traffic display next"),
         (key("N"), Key::Action(Action::TrafficPrev), "Traffic display prev"),
     ]
