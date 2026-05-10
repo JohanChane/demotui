@@ -18,12 +18,12 @@ mod_agent!(
         ([KeyCode::Char('h')], Key::Parent, ""),
         ([KeyCode::Char('l')], Key::Expand, ""),
         ([KeyCode::Enter], Key::Select, ""),
-        ([KeyCode::Char('g'), KeyCode::Char('g')], Key::GoTop, "Jump to top"),
-        ([KeyCode::Char('G')], Key::GoBottom, "Jump to bottom"),
+        ([KeyCode::Char('g'), KeyCode::Char('g')], Key::GoTop, "Go to top"),
+        ([KeyCode::Char('G')], Key::GoBottom, "Go to bottom"),
         ([KeyCode::Char('/')], Key::Search, "Search/Filter"),
-        ([KeyCode::Char('s'), KeyCode::Char('n')], Key::SortByName, "Group sort by name"),
-        ([KeyCode::Char('s'), KeyCode::Char('d')], Key::SortByDelay, "Group sort by delay"),
-        ([KeyCode::Char('s'), KeyCode::Char('r')], Key::ResetSort, "Group reset sort"),
+        ([KeyCode::Char('s'), KeyCode::Char('n')], Key::SortByName, "Sort by name"),
+        ([KeyCode::Char('s'), KeyCode::Char('d')], Key::SortByDelay, "Sort by delay"),
+        ([KeyCode::Char('s'), KeyCode::Char('r')], Key::ResetSort, "Reset sort"),
         ([KeyCode::Char('S'), KeyCode::Char('n')], Key::GlobalSortByName, "Global sort by name"),
         ([KeyCode::Char('S'), KeyCode::Char('d')], Key::GlobalSortByDelay, "Global sort by delay"),
         ([KeyCode::Char('S'), KeyCode::Char('r')], Key::GlobalResetSort, "Global reset sort"),
@@ -32,7 +32,7 @@ mod_agent!(
         ([KeyCode::Char('t')], Key::TestDelay, "Test delay"),
         ([KeyCode::Char('a'), KeyCode::Char('t')], Key::TestAllDelay, "Test all delay"),
         ([KeyCode::Char('r')], Key::Refresh, "Refresh"),
-        ([KeyCode::Char('f')], Key::FzfFind, "Fuzzy find proxy"),
+        ([KeyCode::Char('f')], Key::FzfFind, "Find proxy"),
     ]
 );
 

@@ -1,6 +1,5 @@
 use super::dev::*;
 use crate::config::CoreType;
-use ratatui::text::Line;
 use ratatui::widgets::ListItem;
 
 newtype_tab!(CoreSrvCtlTab(Tab<SrvCtlContent>));
@@ -8,7 +7,7 @@ newtype_tab!(CoreSrvCtlTab(Tab<SrvCtlContent>));
 mod_agent!(
     SrvCtlKey,
     [
-        ([KeyCode::Enter], SrvCtlKey::Execute, "Execute selected operation"),
+        ([KeyCode::Enter], SrvCtlKey::Execute, "Execute"),
         ([KeyCode::Esc], SrvCtlKey::Esc, ""),
         ([KeyCode::Up], SrvCtlKey::MoveUp, ""),
         ([KeyCode::Down], SrvCtlKey::MoveDown, ""),
@@ -91,10 +90,43 @@ struct SrvCtlContent {
     is_user: bool,
     status: String,
     core_label: String,
+    mihomo_status: String,
+    singbox_status: String,
+    mihomo_service_name: String,
+    singbox_service_name: String,
+    mihomo_is_user: bool,
+    singbox_is_user: bool,
 }
 
 impl SrvCtlContent {
-    fn spawn_status_check(&self, task_set: &mut FutureSet<Self>) {
+    fn spawn_status_check(&self, task_set: &mut FutureSet<Self>, target: CoreType) {
+        let (service_name, is_user) = match target {
+            CoreType::Mihomo => (self.mihomo_service_name.clone(), self.mihomo_is_user),
+            CoreType::Singbox => (self.singbox_service_name.clone(), self.singbox_is_user),
+        };
+        async move {
+            let mut args = vec!["is-active"];
+            if is_user {
+                args.push("--user");
+            }
+            args.push(&service_name);
+            let output = std::process::Command::new("systemctl")
+                .args(&args)
+                .output();
+            let status = match output {
+                Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_owned(),
+                Err(_) => "?".to_owned(),
+            };
+            wrapper(move |c: &mut SrvCtlContent| {
+                match target {
+                    CoreType::Mihomo => c.mihomo_status = status,
+                    CoreType::Singbox => c.singbox_status = status,
+                }
+            })
+        }
+        .spawn_at(task_set);
+    }
+    fn spawn_current_status_check(&self, task_set: &mut FutureSet<Self>) {
         let service_name = self.service_name.clone();
         let is_user = self.is_user;
         async move {
@@ -111,7 +143,11 @@ impl SrvCtlContent {
                 Err(_) => "?".to_owned(),
             };
             wrapper(move |c: &mut SrvCtlContent| {
-                c.status = status;
+                c.status = status.clone();
+                match crate::config::CONFIG.core_type() {
+                    CoreType::Mihomo => c.mihomo_status = status,
+                    CoreType::Singbox => c.singbox_status = status,
+                }
             })
         }
         .spawn_at(task_set);
@@ -134,37 +170,47 @@ impl TabContent for SrvCtlContent {
     fn init(&mut self, task_set: &mut FutureSet<Self>, state: &mut Self::State) {
         self.ops = SrvCtlOp::all();
         let cfg = &crate::config::CONFIG.cfg_file;
+
+        self.mihomo_service_name = cfg.mihomo.core_service.service_name.clone();
+        if self.mihomo_service_name.is_empty() {
+            self.mihomo_service_name = "clashtui_mihomo".to_owned();
+        }
+        self.mihomo_is_user = cfg.mihomo.core_service.is_user;
+
+        self.singbox_service_name = cfg.singbox.core_service.service_name.clone();
+        if self.singbox_service_name.is_empty() {
+            self.singbox_service_name = "clashtui_singbox".to_owned();
+        }
+        self.singbox_is_user = cfg.singbox.core_service.is_user;
+
         match crate::config::CONFIG.core_type() {
             CoreType::Mihomo => {
-                self.service_name = cfg.mihomo.core_service.service_name.clone();
-                if self.service_name.is_empty() {
-                    self.service_name = "clashtui_mihomo".to_owned();
-                }
+                self.service_name = self.mihomo_service_name.clone();
                 self.bin_path = cfg.mihomo.core.bin_path.clone();
                 if self.bin_path.is_empty() {
                     self.bin_path = "/usr/bin/mihomo".to_owned();
                 }
-                self.is_user = cfg.mihomo.core_service.is_user;
+                self.is_user = self.mihomo_is_user;
                 self.core_label = "mihomo".to_owned();
             }
             CoreType::Singbox => {
-                self.service_name = cfg.singbox.core_service.service_name.clone();
-                if self.service_name.is_empty() {
-                    self.service_name = "clashtui_singbox".to_owned();
-                }
+                self.service_name = self.singbox_service_name.clone();
                 self.bin_path = cfg.singbox.core.bin_path.clone();
                 if self.bin_path.is_empty() {
                     self.bin_path = "/usr/bin/sing-box".to_owned();
                 }
-                self.is_user = cfg.singbox.core_service.is_user;
+                self.is_user = self.singbox_is_user;
                 self.core_label = "sing-box".to_owned();
             }
         }
         self.status = "...".to_owned();
+        self.mihomo_status = "...".to_owned();
+        self.singbox_status = "...".to_owned();
         if !self.ops.is_empty() {
             state.select(Some(0));
         }
-        self.spawn_status_check(task_set);
+        self.spawn_status_check(task_set, CoreType::Mihomo);
+        self.spawn_status_check(task_set, CoreType::Singbox);
     }
 
     fn handle_key_event(
@@ -190,7 +236,7 @@ impl TabContent for SrvCtlContent {
                 let Some(op) = self.ops.get(idx) else { return };
                 let op = *op;
 
-                let bin_path = self.bin_path.clone();
+                let _bin_path = self.bin_path.clone();
                 let needs_sudo = !self.is_user;
 
                 async move {
@@ -222,7 +268,12 @@ impl TabContent for SrvCtlContent {
                                         .with_prompt(out)
                                         .build_and_send();
                                         wrapper(move |c: &mut SrvCtlContent| {
-                                            c.status = $new_status.to_owned();
+                                            let s = $new_status.to_owned();
+                                            c.status = s.clone();
+                                            match crate::config::CONFIG.core_type() {
+                                                CoreType::Mihomo => c.mihomo_status = s,
+                                                CoreType::Singbox => c.singbox_status = s,
+                                            }
                                         })
                                     }
                                 }
@@ -295,6 +346,9 @@ impl TabContent for SrvCtlContent {
                                 Ok(()) => {
                                     let update_label = wrapper(move |c: &mut SrvCtlContent| {
                                         c.core_label = new_label.to_owned();
+                                        c.status = "inactive".to_owned();
+                                        c.mihomo_status = "inactive".to_owned();
+                                        c.singbox_status = "inactive".to_owned();
                                     });
                                     let rx = crate::tui::widget::popmsg::Confirm::title(
                                         "Core changed".to_owned(),
@@ -327,16 +381,46 @@ impl TabContent for SrvCtlContent {
 
     fn render(&self, f: &mut Frame, area: Rect, state: &mut Self::State) {
         let user_tag = if self.is_user { " (user)" } else { "" };
+        let theme = Theme::get();
+
+        let current_core_label = format!(
+            "► {}: {}",
+            match crate::config::CONFIG.core_type() {
+                CoreType::Mihomo => "mihomo",
+                CoreType::Singbox => "sing-box",
+            },
+            self.status
+        );
+        let other_core_label = format!(
+            "  {}: {}",
+            match crate::config::CONFIG.core_type() {
+                CoreType::Mihomo => "sing-box",
+                CoreType::Singbox => "mihomo",
+            },
+            match crate::config::CONFIG.core_type() {
+                CoreType::Mihomo => &self.singbox_status,
+                CoreType::Singbox => &self.mihomo_status,
+            }
+        );
+
         let block = Block::bordered()
-            .border_style(Theme::get().tab.tab_focused)
+            .border_style(theme.tab.tab_focused)
             .title(format!(
                 "{} — {} (core: {}){}",
                 Self::TITLE, self.service_name, self.core_label, user_tag
             ))
             .title_bottom(
-                Line::raw(format!(" {} ", self.status))
-                    .right_aligned()
-                    .reversed(),
+                ratatui::text::Line::from(vec![
+                    ratatui::text::Span::styled(
+                        format!(" {} ", current_core_label),
+                        theme.tab.tab_focused,
+                    ),
+                    ratatui::text::Span::styled(
+                        format!(" {} ", other_core_label),
+                        theme.tab.dualtab_unfocused,
+                    ),
+                ])
+                .right_aligned(),
             );
 
         let items: Vec<ListItem> = self
@@ -345,7 +429,7 @@ impl TabContent for SrvCtlContent {
             .map(|op| ListItem::new(format!("  {}", op.as_str())))
             .collect();
 
-        let highlight_style = Theme::get().tab.item_highlighted;
+        let highlight_style = theme.tab.item_highlighted;
         let list = List::new(items)
             .block(block)
             .highlight_style(highlight_style);
