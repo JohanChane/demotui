@@ -181,18 +181,15 @@ const RULE_PROVIDERS: &str = "rule-providers";
 const RULES: &str = "rules";
 
 fn urls_to_groups(urls: &[String]) -> crate::config::database::ProxyProviderGroups {
-    use crate::config::database::{ProviderUrl, ProxyProviderGroups};
+    use crate::config::database::ProxyProviderGroups;
     let mut groups = ProxyProviderGroups::new();
     if urls.is_empty() {
         return groups;
     }
-    let providers: Vec<ProviderUrl> = urls
+    let providers: std::collections::BTreeMap<String, String> = urls
         .iter()
         .enumerate()
-        .map(|(i, url)| ProviderUrl {
-            name: format!("pvd{i}"),
-            url: url.clone(),
-        })
+        .map(|(i, url)| (format!("pvd{i}"), url.clone()))
         .collect();
     groups.insert("pvd".into(), providers);
     groups

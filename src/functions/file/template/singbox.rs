@@ -110,9 +110,9 @@ pub async fn gen_template_singbox(
     let mut provider_proxies: HashMap<String, Vec<JsonValue>> = HashMap::new();
     let mut download_handles = Vec::new();
     for providers in groups.values() {
-        for pv in providers {
-            let url = pv.url.clone();
-            let pp_name = pv.name.clone();
+        for (pp_name, url) in providers {
+            let url = url.clone();
+            let pp_name = pp_name.clone();
             download_handles.push(tokio::task::spawn_blocking(move || {
                 (pp_name, download_subscription(&url, with_proxy))
             }));
@@ -216,7 +216,7 @@ pub async fn gen_template_singbox(
 
                 let group_providers: Vec<&str> = groups
                     .get(group_key)
-                    .map(|providers| providers.iter().map(|p| p.name.as_str()).collect())
+                    .map(|providers| providers.keys().map(|s| s.as_str()).collect())
                     .unwrap_or_default();
 
                 for pp_name in &group_providers {
@@ -278,8 +278,8 @@ pub async fn gen_template_singbox(
                         }
                         // Check if key matches a proxy-provider group → expand to proxy tags
                         if let Some(prov_group) = groups.get(key) {
-                            for pv in prov_group {
-                                if let Some(tags) = pp_tags.get(&pv.name) {
+                            for name in prov_group.keys() {
+                                if let Some(tags) = pp_tags.get(name) {
                                     resolved.extend(tags.clone());
                                 }
                             }

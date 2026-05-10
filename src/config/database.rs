@@ -1,12 +1,5 @@
-/// A proxy-provider entry with a name and subscription URL.
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct ProviderUrl {
-    pub name: String,
-    pub url: String,
-}
-
-/// Group name → list of proxy-provider name+URL entries.
-pub type ProxyProviderGroups = std::collections::HashMap<String, Vec<ProviderUrl>>;
+/// Group name → provider_name → URL.
+pub type ProxyProviderGroups = std::collections::HashMap<String, std::collections::BTreeMap<String, String>>;
 
 #[derive(Clone)]
 pub struct Profile {
@@ -288,7 +281,7 @@ mihomo:
   profiles:
     pf1: File
     pf2: !Url "https://raw.com"
-    pf3: !Template {template: tpl.yaml, proxy_provider_groups: {pvd: [{name: "foo", url: "https://a.com"}]}}
+    pf3: !Template {template: tpl.yaml, proxy_provider_groups: {pvd: {foo: "https://a.com"}}}
 singbox:
   profiles: {}
 "#;
@@ -302,7 +295,7 @@ singbox:
         assert_eq!(db.mihomo.profiles.get("pf2").unwrap().no_pp, false);
         let expected_groups: ProxyProviderGroups = {
             let mut m = std::collections::HashMap::new();
-            m.insert("pvd".into(), vec![ProviderUrl { name: "foo".into(), url: "https://a.com".into() }]);
+            m.insert("pvd".into(), [("foo".into(), "https://a.com".into())].into());
             m
         };
         assert_eq!(
@@ -340,7 +333,7 @@ singbox:
         db.insert("pf2", ProfileType::Url("https://raw.com".to_string()));
         let groups: ProxyProviderGroups = {
             let mut m = std::collections::HashMap::new();
-            m.insert("pvd".into(), vec![ProviderUrl { name: "foo".into(), url: "https://a.com".into() }]);
+            m.insert("pvd".into(), [("foo".into(), "https://a.com".into())].into());
             m
         };
         db.insert(

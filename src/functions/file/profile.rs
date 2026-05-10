@@ -245,11 +245,11 @@ async fn update_template_profile(
     if is_singbox {
         super::template::apply_template_singbox(&template, &profile.name, &groups, with_proxy).await?;
         for (_, providers) in &groups {
-            for pv in providers {
-                let domain = extract_domain(&pv.url).unwrap_or("unknown");
+            for (name, url) in providers {
+                let domain = extract_domain(url).unwrap_or("unknown");
                 statuses.push(NetResourceUpdate {
-                    name: pv.name.clone(),
-                    url: pv.url.clone(),
+                    name: name.clone(),
+                    url: url.clone(),
                     path: String::new(),
                     section: ResourceSection::ProxyProvider,
                     ok: true,

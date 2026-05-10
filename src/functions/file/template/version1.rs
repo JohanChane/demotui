@@ -65,10 +65,10 @@ pub(super) fn gen_template_with_urls(
 
         // Look up providers in the group matching the proxy-provider key
         if let Some(providers) = groups.get(pp_key_str) {
-            for pv in providers {
+            for (name, url) in providers {
                 let mut new_pp = pp.clone();
                 new_pp.remove("tpl_param");
-                let the_pp_name = pv.name.clone();
+                let the_pp_name = name.clone();
                 pp_names
                     .entry(pp_key_str.to_string())
                     .or_default()
@@ -76,7 +76,7 @@ pub(super) fn gen_template_with_urls(
 
                 new_pp.insert(
                     serde_yml::Value::String("url".into()),
-                    serde_yml::Value::String(pv.url.clone()),
+                    serde_yml::Value::String(url.clone()),
                 );
                 new_pp.insert(
                     serde_yml::Value::String("path".into()),
@@ -240,7 +240,7 @@ pub(super) fn gen_template_with_urls(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::database::{ProviderUrl, ProxyProviderGroups};
+    use crate::config::database::ProxyProviderGroups;
     use std::collections::HashMap;
 
     fn testdata_path(name: &str) -> std::path::PathBuf {
@@ -262,13 +262,10 @@ mod tests {
         if urls.is_empty() {
             return groups;
         }
-        let providers: Vec<ProviderUrl> = urls
+        let providers: std::collections::BTreeMap<String, String> = urls
             .iter()
             .enumerate()
-            .map(|(i, url)| ProviderUrl {
-                name: format!("{group_name}{i}"),
-                url: url.to_string(),
-            })
+            .map(|(i, url)| (format!("{group_name}{i}"), url.to_string()))
             .collect();
         groups.insert(group_name.to_string(), providers);
         groups
@@ -277,13 +274,10 @@ mod tests {
     fn make_multi_groups(pairs: &[(&str, &[&str])]) -> ProxyProviderGroups {
         let mut groups = ProxyProviderGroups::new();
         for (name, urls) in pairs {
-            let providers: Vec<ProviderUrl> = urls
+            let providers: std::collections::BTreeMap<String, String> = urls
                 .iter()
                 .enumerate()
-                .map(|(i, url)| ProviderUrl {
-                    name: format!("{name}{i}"),
-                    url: url.to_string(),
-                })
+                .map(|(i, url)| (format!("{name}{i}"), url.to_string()))
                 .collect();
             groups.insert(name.to_string(), providers);
         }
