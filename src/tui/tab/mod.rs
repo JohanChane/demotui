@@ -185,6 +185,7 @@ pub trait TuiTab: super::TuiWidget {
 
 mod connections;
 mod files;
+mod logs;
 mod proxies;
 mod settings;
 mod srvctl;
@@ -251,6 +252,7 @@ pub mod prelude {
     pub use super::TuiTab;
     pub use super::connections::ConnectionsTab;
     pub use super::files::FileTab;
+    pub use super::logs::LogsTab;
     pub use super::proxies::ProxiesTab;
     pub use super::settings::SettingsTab;
     pub use super::srvctl::CoreSrvCtlTab;
@@ -278,6 +280,11 @@ pub mod prelude {
             super::settings::agent_init(keys);
         }
 
+        if let Ok(map) = crate::tui::agent::get(keymap, "logs") {
+            let keys = serde_yml::from_value(serde_yml::Value::Mapping(map))?;
+            super::logs::agent_init(keys);
+        }
+
         Ok(())
     }
 
@@ -289,6 +296,7 @@ pub mod prelude {
             SettingsTab,
             CoreSrvCtlTab,
             StatusTab,
+            LogsTab,
         }
     );
 }
