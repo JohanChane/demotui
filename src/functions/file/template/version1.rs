@@ -12,7 +12,7 @@ struct PGitem {
     #[serde(skip_serializing_if = "Option::is_none")]
     proxies: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    expand_this_group_with: Option<Vec<String>>,
+    expand_group_with: Option<Vec<String>>,
     #[serde(rename = "type")]
     __type: String,
     #[serde(flatten)]
@@ -104,7 +104,7 @@ pub(super) fn gen_template_with_urls(
     };
 
     for the_pg_value in pg_value {
-        if the_pg_value.get("expand_this_group_with").is_none() {
+        if the_pg_value.get("expand_group_with").is_none() {
             new_proxy_groups.push(the_pg_value.clone());
             continue;
         }
@@ -116,21 +116,21 @@ pub(super) fn gen_template_with_urls(
         };
 
         let mut new_pg = the_pg.clone();
-        new_pg.remove("expand_this_group_with");
+        new_pg.remove("expand_group_with");
 
         let provider_keys = if let Some(provider_keys) =
-            the_pg["expand_this_group_with"].as_sequence()
+            the_pg["expand_group_with"].as_sequence()
         {
             provider_keys
         } else {
-            anyhow::bail!("Failed to parse `expand_this_group_with`");
+            anyhow::bail!("Failed to parse `expand_group_with`");
         };
 
         for the_provider_key in provider_keys {
             let the_pk_str = if let serde_yml::Value::String(the_pk_str) = the_provider_key {
                 the_pk_str.as_str()
             } else {
-                anyhow::bail!("Failed to parse string in `expand_this_group_with`")
+                anyhow::bail!("Failed to parse string in `expand_group_with`")
             };
             // Parse ${group_name} from the key
             let the_pk_str = if the_pk_str.starts_with("${") && the_pk_str.ends_with('}') {
@@ -233,11 +233,6 @@ pub(super) fn gen_template_with_urls(
             );
         }
     }
-
-    out_parsed_yaml.insert(
-        "clashtui".into(),
-        serde_yml::Value::Null,
-    );
 
     Ok(out_parsed_yaml)
 }
@@ -486,16 +481,6 @@ mod tests {
         let groups = ProxyProviderGroups::new();
         let result = gen_template_with_urls(tpl, "bad_placeholder_tpl", &groups);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_clashtui_marker_present() {
-        let tpl = load_yaml(testdata_path("simple_tpl.yaml")).unwrap();
-        let groups = make_groups("pvd", &["https://example.com/sub1.yaml"]);
-        let result = gen_template_with_urls(tpl, "simple_tpl", &groups).unwrap();
-
-        assert!(result.contains_key("clashtui"));
-        assert_eq!(result.get("clashtui").unwrap(), &serde_yml::Value::Null);
     }
 
     #[test]

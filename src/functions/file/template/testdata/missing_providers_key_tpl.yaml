@@ -7,6 +7,6 @@ proxy-providers:
 proxy-groups:
   - name: Auto
     type: url-test
-    expand_this_group_with: "not-an-array"
+    expand_group_with: "not-an-array"
     url: https://www.gstatic.com/generate_204
     interval: 300

@@ -65,10 +65,6 @@ impl Config {
         let mut cfg_file = ConfigFile::from_file()?;
         let basic_info = BasicInfo::from_file()?;
         let mut data: ProfileManager = ProfileManager::from_file()?;
-        // migrate File → Template for mihomo profiles with clashtui marker
-        if data.migrate_file_to_template(&profile_yamls_path()) {
-            let _ = data.to_file();
-        }
         let data: Mutex<ProfileManager> = data.into();
         if !cfg_file.mihomo.core.config_path.is_empty() {
             cfg_file.mihomo.core.config_path = std::path::absolute(

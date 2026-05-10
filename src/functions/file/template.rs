@@ -1,9 +1,64 @@
 use super::{MAX_SUPPORTED_TEMPLATE_VERSION, PROFILE_JSONS_PATH, PROFILE_YAMLS_PATH, TEMPLATE_PATH};
 use crate::config::database::ProfileType;
 use anyhow::Context as _;
+use std::collections::{HashMap, HashSet};
 
 mod version1;
 pub mod singbox;
+
+/// Records a proxy name rename applied during deduplication.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RenameEntry {
+    pub origin_name: String,
+    pub new_name: String,
+}
+
+/// Per-provider rename record: provider_name -> list of renames applied.
+pub type RenameRecord = HashMap<String, Vec<RenameEntry>>;
+
+/// Deduplicate proxy names across proxy-providers.
+///
+/// Proxies are processed in iteration order (determined by the providers HashMap).
+/// First occurrence of a name wins; subsequent collisions are renamed to
+/// `<origin_name>-<provider_name>`. Returns the deduplicated proxy map and
+/// a rename record grouped by provider.
+pub(super) fn dedup_mihomo_proxy_names(
+    providers: HashMap<String, Vec<serde_yml::Value>>,
+) -> (HashMap<String, Vec<serde_yml::Value>>, RenameRecord) {
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut rename_record: RenameRecord = HashMap::new();
+    let mut result: HashMap<String, Vec<serde_yml::Value>> = HashMap::new();
+
+    for (pp_name, proxies) in providers {
+        let mut renamed_proxies = Vec::new();
+        let mut pp_renames: Vec<RenameEntry> = Vec::new();
+
+        for mut proxy in proxies {
+            if let Some(serde_yml::Value::String(name)) = proxy.get("name") {
+                let name_str = name.clone();
+                if seen.contains(&name_str) {
+                    let new_name = format!("{}-{}", name_str, pp_name);
+                    pp_renames.push(RenameEntry {
+                        origin_name: name_str,
+                        new_name: new_name.clone(),
+                    });
+                    seen.insert(new_name.clone());
+                    proxy["name"] = serde_yml::Value::String(new_name);
+                } else {
+                    seen.insert(name_str);
+                }
+            }
+            renamed_proxies.push(proxy);
+        }
+
+        if !pp_renames.is_empty() {
+            rename_record.insert(pp_name.clone(), pp_renames);
+        }
+        result.insert(pp_name, renamed_proxies);
+    }
+
+    (result, rename_record)
+}
 
 pub fn get_all_templates() -> std::io::Result<Vec<String>> {
     Ok(std::fs::read_dir(TEMPLATE_PATH.as_path())?
@@ -235,16 +290,7 @@ pub async fn update_profile_without_pp(
                         .remove(PROXIES)
                         .and_then(|v| serde_yml::from_value(v).ok())
                         .unwrap_or_default();
-                    let renamed_proxies = loaded_proxies
-                        .into_iter()
-                        .map(|mut proxy| {
-                            if let Some(serde_yml::Value::String(name)) = proxy.get_mut("name") {
-                                name.insert_str(0, pp_name.as_str());
-                            }
-                            proxy
-                        })
-                        .collect();
-                    pp_proxies.insert(pp_name.clone(), renamed_proxies);
+                    pp_proxies.insert(pp_name.clone(), loaded_proxies);
                     statuses.push(NetResourceUpdate {
                         name: pp_name,
                         url,
@@ -266,6 +312,7 @@ pub async fn update_profile_without_pp(
                 }
             }
         }
+        let (pp_proxies, _rename_record) = dedup_mihomo_proxy_names(pp_proxies);
         pp_proxies
     } else {
         HashMap::new()

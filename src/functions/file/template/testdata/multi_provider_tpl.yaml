@@ -29,13 +29,13 @@ proxy-groups:
       - ${Fallback}
   - name: Auto
     type: url-test
-    expand_this_group_with:
+    expand_group_with:
       - ${pvd}
     url: https://www.gstatic.com/generate_204
     interval: 300
   - name: Fallback
     type: fallback
-    expand_this_group_with:
+    expand_group_with:
       - ${pvd2}
     url: https://www.gstatic.com/generate_204
     interval: 600

@@ -276,57 +276,6 @@ impl ProfileManager {
         }
     }
 
-    /// Migrate mihomo `File` profiles that have `clashtui` marker
-    /// in their YAML to `Template` type with empty URLs.
-    /// Returns true if any migration was performed.
-    pub fn migrate_file_to_template(
-        &mut self,
-        profile_yamls_dir: &std::path::Path,
-    ) -> bool {
-        let file_names: Vec<String> = self
-            .mihomo
-            .profiles
-            .iter()
-            .filter(|(_, data)| data.dtype == ProfileType::File)
-            .map(|(name, _)| name.clone())
-            .collect();
-
-        if file_names.is_empty() {
-            return false;
-        }
-
-        let mut migrated = false;
-        for name in file_names {
-            let yaml_path = profile_yamls_dir.join(format!("{name}.yaml"));
-            let Ok(file) = std::fs::File::open(&yaml_path) else {
-                continue;
-            };
-            let Ok(value): std::result::Result<serde_yml::Value, _> =
-                serde_yml::from_reader(file)
-            else {
-                continue;
-            };
-            if value.get("clashtui").is_none() {
-                continue;
-            }
-            let template = value
-                .get("clashtui_template_name")
-                .and_then(|v| v.as_str())
-                .unwrap_or(&name)
-                .to_owned();
-            if let Some(data) = self.mihomo.profiles.get_mut(&name) {
-                data.dtype = ProfileType::Template {
-                    template,
-                    proxy_provider_groups: ProxyProviderGroups::new(),
-                };
-                log::warn!(
-                    "Migrated profile '{name}' from File to Template (template inferred, no proxy-provider groups)"
-                );
-                migrated = true;
-            }
-        }
-        migrated
-    }
 }
 
 #[cfg(test)]

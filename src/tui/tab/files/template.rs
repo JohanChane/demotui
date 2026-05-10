@@ -214,7 +214,12 @@ mod actions {
     async fn generate(name: String) -> CB {
         let profile_name = format!("{name}.tpl");
         let groups = tri!(read_template_proxy_providers());
-        tri!(apply_template(&name, &profile_name, &groups));
+        let is_singbox = crate::config::CONFIG.core_type() == crate::config::CoreType::Singbox;
+        if is_singbox {
+            tri!(apply_template_singbox(&name, &profile_name, &groups, false).await);
+        } else {
+            tri!(apply_template(&name, &profile_name, &groups));
+        }
         sync!(C)
     }
 
