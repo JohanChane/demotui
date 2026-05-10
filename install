@@ -74,7 +74,7 @@ ExecReload=/bin/kill -HUP $MAINPID
 WantedBy=multi-user.target
 EOF
 
-  sudo ln -sf $CLASHTUI_INSTALL_DIR/mihomo/clashtui_mihomo.service /etc/systemd/system/
+  sudo ln -sf $CLASHTUI_INSTALL_DIR/mihomo/clashtui_mihomo.service /usr/lib/systemd/system/
   sudo systemctl daemon-reload
 }
 
@@ -121,7 +121,7 @@ Environment="ENABLE_DEPRECATED_GEOSITE=true"
 WantedBy=multi-user.target
 EOF
 
-  sudo ln -sf $CLASHTUI_INSTALL_DIR/sing-box/clashtui_singbox.service /etc/systemd/system/
+  sudo ln -sf $CLASHTUI_INSTALL_DIR/sing-box/clashtui_singbox.service /usr/lib/systemd/system/
   sudo systemctl daemon-reload
 }
 
@@ -631,9 +631,9 @@ uninstall() {
     return 1
   fi
 
-  sudo rm -f /etc/systemd/system/clashtui_mihomo.service
   sudo rm -f /usr/lib/systemd/system/clashtui_mihomo.service
-  sudo rm -f /etc/systemd/system/clashtui_singbox.service
+  sudo rm -f /usr/lib/systemd/system/clashtui_mihomo.service
+  sudo rm -f /usr/lib/systemd/system/clashtui_singbox.service
   sudo systemctl daemon-reload
   sudo rm -f /usr/local/bin/clashtui
   sudo rm -f /usr/bin/sing-box
