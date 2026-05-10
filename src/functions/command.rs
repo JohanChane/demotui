@@ -67,6 +67,20 @@ pub fn stop_service(password: Option<&str>) -> Result<String> {
     svc_operation("stop", password, None)
 }
 
+pub fn stop_all_services(password: Option<&str>) -> Result<String> {
+    let mut outputs = Vec::new();
+    let core_types = [CoreType::Mihomo, CoreType::Singbox];
+    for ct in &core_types {
+        match stop_core_service(password, *ct) {
+            Ok(out) => outputs.push(out),
+            Err(e) => {
+                log::warn!("Failed to stop {:?} service: {e}", ct);
+            }
+        }
+    }
+    Ok(outputs.join("\n"))
+}
+
 pub fn edit(path: &str) -> Result<()> {
     log::debug!("edit: path={path} cmd={}", CONFIG.cfg_file.extra.edit_cmd);
     spawn(

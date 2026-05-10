@@ -66,6 +66,7 @@ enum SrvCtlOp {
     Stop,
     Restart,
     SwitchCore,
+    StopAll,
 }
 
 impl SrvCtlOp {
@@ -74,10 +75,11 @@ impl SrvCtlOp {
             Self::Stop => "Stop Service",
             Self::Restart => "Start Service",
             Self::SwitchCore => "Switch Core",
+            Self::StopAll => "Stop All Services",
         }
     }
     fn all() -> Vec<Self> {
-        vec![Self::Stop, Self::Restart, Self::SwitchCore]
+        vec![Self::Stop, Self::Restart, Self::SwitchCore, Self::StopAll]
     }
 }
 
@@ -266,6 +268,12 @@ impl TabContent for SrvCtlContent {
                                 "active"
                             )
                         }
+                        SrvCtlOp::StopAll => {
+                            handle!(
+                                crate::functions::command::stop_all_services(pw_ref),
+                                "inactive"
+                            )
+                        }
                         SrvCtlOp::SwitchCore => {
                             let old_type = crate::config::CONFIG.core_type();
                             let new_type = match old_type {
@@ -277,32 +285,37 @@ impl TabContent for SrvCtlContent {
                                 CoreType::Singbox => "sing-box",
                             };
 
-                            // stop old core before switching
-                            if let Err(e) =
-                                crate::functions::command::stop_core_service(pw_ref, old_type)
-                            {
-                                log::warn!("Failed to stop old core: {e}");
-                            }
+                            // stop all core services before switching
+                            let _ = crate::functions::command::stop_all_services(pw_ref);
 
                             match (|| -> anyhow::Result<()> {
                                 crate::config::CONFIG.data.lock().unwrap().core_type = new_type;
                                 crate::config::CONFIG.save()
                             })() {
                                 Ok(()) => {
-                                    wrapper(move |c: &mut SrvCtlContent| {
+                                    let update_label = wrapper(move |c: &mut SrvCtlContent| {
                                         c.core_label = new_label.to_owned();
                                     });
-                                    crate::tui::widget::popmsg::Confirm::title("OK".to_owned())
-                                        .with_prompt(format!(
-                                            "Core changed to {new_label}. Restart demotui for changes to take effect."
-                                        ))
-                                        .build_and_send();
+                                    let rx = crate::tui::widget::popmsg::Confirm::title(
+                                        "Core changed".to_owned(),
+                                    )
+                                    .with_prompt(format!(
+                                        "Core changed to {new_label}. Restart demotui for changes to take effect.\n\nEnter to quit now, Esc to continue."
+                                    ))
+                                    .build_and_send();
+                                    if rx.await.is_ok() {
+                                        crate::tui::app::QUIT.store(
+                                            true,
+                                            std::sync::atomic::Ordering::Relaxed,
+                                        );
+                                    }
+                                    update_label
                                 }
                                 Err(e) => {
                                     crate::tui::widget::popmsg::Confirm::err(e);
+                                    do_nothing()
                                 }
                             }
-                            do_nothing()
                         }
                     }
                 }
