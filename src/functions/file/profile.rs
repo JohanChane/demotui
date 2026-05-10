@@ -258,16 +258,90 @@ async fn update_template_profile(
             }
         }
     } else {
-        super::template::apply_template(&template, &profile.name, &groups)?;
-        let path = PROFILE_YAMLS_PATH.join(format!("{}.yaml", &profile.name));
-        if path.exists() {
-            let content: serde_yml::Mapping = {
-                let file = std::fs::File::open(&path)?;
-                serde_yml::from_reader(file)
-                    .map_err(|e| anyhow::anyhow!("Failed to read generated profile YAML: {e}"))?
-            };
-            statuses = super::template::fetch_net_resource_statuses(&content, with_proxy).await;
+        let cfg_dir = std::path::PathBuf::from(
+            &crate::config::CONFIG.cfg_file.mihomo.core.config_dir,
+        );
+        let tpl_name = std::path::Path::new(&template)
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&template);
+
+        let mut download_handles = Vec::new();
+        for providers in groups.values() {
+            for (name, url) in providers {
+                let url = url.clone();
+                let name = name.clone();
+                let path = cfg_dir.join(format!("proxy-providers/tpl/{}/{}.yaml", tpl_name, &name));
+                download_handles.push(tokio::task::spawn_blocking(move || {
+                    match crate::functions::restful::download::profile(&url, with_proxy) {
+                        Ok(mut rdr) => {
+                            let mut buf = Vec::new();
+                            if let Err(e) = std::io::Read::read_to_end(&mut rdr, &mut buf) {
+                                return (name, url, path, false, Some(e.to_string()));
+                            }
+                            if serde_yml::from_slice::<serde_yml::Mapping>(&buf).is_err() {
+                                return (name, url, path, false, Some("Invalid YAML format".to_string()));
+                            }
+                            if let Some(parent) = path.parent() {
+                                if let Err(e) = std::fs::create_dir_all(parent) {
+                                    return (name, url, path, false, Some(e.to_string()));
+                                }
+                            }
+                            match std::fs::write(&path, &buf) {
+                                Ok(()) => (name, url, path, true, None),
+                                Err(e) => (name, url, path, false, Some(e.to_string())),
+                            }
+                        }
+                        Err(e) => {
+                            if path.exists() && std::fs::read(&path).is_ok_and(|buf| {
+                                serde_yml::from_slice::<serde_yml::Mapping>(&buf).is_ok()
+                            }) {
+                                (name, url, path, true, None)
+                            } else {
+                                (name, url, path, false, Some(e.to_string()))
+                            }
+                        }
+                    }
+                }));
+            }
         }
+
+        let mut all_ok = true;
+        for handle in download_handles {
+            let (name, url, path, ok, error) = handle.await?;
+            if !ok {
+                all_ok = false;
+            }
+            statuses.push(NetResourceUpdate {
+                name,
+                url,
+                path: path.display().to_string(),
+                section: ResourceSection::ProxyProvider,
+                ok,
+                error,
+            });
+        }
+
+        if !all_ok {
+            let failures: Vec<String> = statuses
+                .iter()
+                .filter(|s| !s.ok)
+                .map(|s| {
+                    format!(
+                        "  {}: {} — {}",
+                        s.name,
+                        extract_domain(&s.url).unwrap_or(&s.url),
+                        s.error.as_deref().unwrap_or("unknown error")
+                    )
+                })
+                .collect();
+            anyhow::bail!(
+                "Failed to download proxy providers — profile not generated:\n{}",
+                failures.join("\n")
+            );
+        }
+
+        super::template::apply_template(&template, &profile.name, &groups)?;
     }
 
     Ok(UpdateResult {

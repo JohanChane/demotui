@@ -44,6 +44,43 @@ pub fn test_config(profile_path: Option<&Path>, enable_geodata_mode: bool) -> St
     stringify_output(opt)
 }
 
+pub fn check_config(profile_path: &Path) -> anyhow::Result<()> {
+    match CONFIG.core_type() {
+        CoreType::Mihomo => {
+            let cfg = &CONFIG.cfg_file.mihomo.core;
+            let output = Command::new(&cfg.bin_path)
+                .args(["-t", "-d", &cfg.config_dir, "-f"])
+                .arg(profile_path)
+                .output()
+                .map_err(|e| anyhow::anyhow!("Failed to run mihomo -t: {e}"))?;
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!(
+                    "mihomo -t failed:\n{}",
+                    stringify_output(output)
+                ))
+            }
+        }
+        CoreType::Singbox => {
+            let cfg = &CONFIG.cfg_file.singbox.core;
+            let output = Command::new(&cfg.bin_path)
+                .args(["check", "-D", &cfg.config_dir, "-c"])
+                .arg(profile_path)
+                .output()
+                .map_err(|e| anyhow::anyhow!("Failed to run sing-box check: {e}"))?;
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(anyhow::anyhow!(
+                    "sing-box check failed:\n{}",
+                    stringify_output(output)
+                ))
+            }
+        }
+    }
+}
+
 fn svc_operation(op: &str, password: Option<&str>, core_type: Option<CoreType>) -> Result<String> {
     let host = &ServiceController::default();
     let ct = core_type.unwrap_or(CONFIG.core_type());
