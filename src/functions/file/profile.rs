@@ -408,44 +408,51 @@ fn rewrite_provider_paths(content: Option<&mut serde_yml::Mapping>) {
 }
 
 async fn select_singbox(profile: Profile) -> anyhow::Result<()> {
-    let path = super::PROFILE_JSONS_PATH.join(format!("{}.json", &profile.name));
+    let profile_path = super::PROFILE_JSONS_PATH.join(format!("{}.json", &profile.name));
     anyhow::ensure!(
-        path.exists(),
+        profile_path.exists(),
         "Profile {} file not found: {}. Download it first.",
-        profile.name, path.display()
+        profile.name, profile_path.display()
     );
 
-    let mut profile_content: serde_json::Value = {
-        let file = std::fs::File::open(&path)?;
-        serde_json::from_reader(file)
-            .map_err(|e| anyhow::anyhow!("Failed to read profile JSON: {e}"))?
-    };
+    let cfg = &crate::config::CONFIG.cfg_file.singbox.core;
+    let override_path = crate::config::singbox_core_override_path();
 
-    match crate::config::load_basic_singbox() {
-        Ok(core_override) => {
-            if let (Some(profile_obj), Some(override_obj)) =
-                (profile_content.as_object_mut(), core_override.as_object())
-            {
-                for (key, value) in override_obj {
-                    profile_obj.insert(key.clone(), value.clone());
-                }
-            }
-        }
-        Err(e) => {
-            log::warn!("Failed to load core override singbox config: {e}, using profile as-is");
-        }
-    }
-
-    let out_path = std::path::absolute(std::path::PathBuf::from(
-        &crate::config::CONFIG.cfg_file.singbox.core.config_path,
-    ))
-    .map_err(|e| anyhow::anyhow!("Failed to resolve singbox config path: {e}"))?;
+    let out_path = std::path::absolute(std::path::PathBuf::from(&cfg.config_path))
+        .map_err(|e| anyhow::anyhow!("Failed to resolve singbox config path: {e}"))?;
 
     if let Some(parent) = out_path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let file = std::fs::File::create(&out_path)?;
-    serde_json::to_writer(file, &profile_content)?;
+
+    // sing-box merge: later -c files override earlier ones.
+    // core_override_config.json overrides profile.json.
+    let mut cmd = std::process::Command::new(&cfg.bin_path);
+    cmd.args(["merge"])
+        .arg(&out_path)
+        .arg("-c")
+        .arg(&profile_path);
+    if override_path.exists() {
+        cmd.arg("-c").arg(&override_path);
+    } else {
+        log::warn!(
+            "core_override_config.json not found at {}, using profile as-is",
+            override_path.display()
+        );
+    }
+
+    let output = cmd
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to run sing-box merge: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(anyhow::anyhow!("sing-box merge failed:\n{stderr}"));
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if !stderr.trim().is_empty() {
+        log::warn!("sing-box merge stderr: {}", stderr.trim());
+    }
 
     db::set_current(profile)?;
 
