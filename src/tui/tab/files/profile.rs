@@ -27,7 +27,7 @@ mod_agent!(
         ([KeyCode::Char('a'), KeyCode::Char('u')], Key::Action(Action::UpdateAll), "Update all"),
         ([KeyCode::Char('/')], Key::Action(Action::Search), ""),
         ([KeyCode::Char('t')], Key::Action(Action::Test), ""),
-        ([KeyCode::Char('f')], Key::Action(Action::FzfFind), "Fuzzy find profile"),
+        ([KeyCode::Char('f')], Key::Action(Action::FzfFind), "Find profile"),
         ([KeyCode::Char('g'), KeyCode::Char('g')], Key::Action(Action::GoTop), "Go to top"),
         ([KeyCode::Char('G')], Key::Action(Action::GoEnd), "Go to end"),
         ([KeyCode::Char('N')], Key::Action(Action::ToggleNoPp), "Toggle no proxy-provider"),

@@ -271,8 +271,8 @@ impl App {
 
     fn render_which(&self, f: &mut ratatui::Frame) {
         use ratatui::layout::{Alignment, Constraint, Layout, Rect};
-        use ratatui::style::Stylize;
-        use ratatui::text::Line;
+        use ratatui::style::{Style, Stylize};
+        use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Clear, Paragraph};
         use widget::chord::key_event_to_str;
 
@@ -285,7 +285,7 @@ impl App {
         let area = f.area();
         let popup_area = Rect {
             x: area.x.saturating_add(area.width.saturating_sub(total_width) / 2),
-            y: area.y.saturating_add(area.height.saturating_sub(total_height) / 2),
+            y: area.height.saturating_sub(total_height + 2),
             width: total_width.min(area.width),
             height: total_height.min(area.height),
         };
@@ -304,6 +304,8 @@ impl App {
         let col_areas = Layout::horizontal(&col_widths).split(inner);
 
         let items_per_col = (candidate_count + cols - 1) / cols;
+
+        let accent = Theme::get().popup.text;
 
         for (col_idx, col_area) in col_areas.iter().enumerate().take(cols) {
             let lines: Vec<Line> = self
@@ -319,7 +321,12 @@ impl App {
                         .map(|k| key_event_to_str(k))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    Line::from(format!(" {}  {}", key_str, desc))
+                    Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled(key_str, accent),
+                        Span::raw("  "),
+                        Span::styled(*desc, Style::new().dim()),
+                    ])
                 })
                 .collect();
 
@@ -329,8 +336,8 @@ impl App {
 
     fn render_global_which(&self, f: &mut ratatui::Frame) {
         use ratatui::layout::{Alignment, Constraint, Layout, Rect};
-        use ratatui::style::Stylize;
-        use ratatui::text::Line;
+        use ratatui::style::{Style, Stylize};
+        use ratatui::text::{Line, Span};
         use ratatui::widgets::{Block, Clear, Paragraph};
         use widget::chord::key_event_to_str;
 
@@ -343,7 +350,7 @@ impl App {
         let area = f.area();
         let popup_area = Rect {
             x: area.x.saturating_add(area.width.saturating_sub(total_width) / 2),
-            y: area.y.saturating_add(area.height.saturating_sub(total_height) / 2),
+            y: area.height.saturating_sub(total_height + 2),
             width: total_width.min(area.width),
             height: total_height.min(area.height),
         };
@@ -363,6 +370,8 @@ impl App {
 
         let items_per_col = (candidate_count + cols - 1) / cols;
 
+        let accent = Theme::get().popup.text;
+
         for (col_idx, col_area) in col_areas.iter().enumerate().take(cols) {
             let lines: Vec<Line> = self
                 .global_chord
@@ -377,7 +386,12 @@ impl App {
                         .map(|k| key_event_to_str(k))
                         .collect::<Vec<_>>()
                         .join(" ");
-                    Line::from(format!(" {}  {}", key_str, desc))
+                    Line::from(vec![
+                        Span::raw(" "),
+                        Span::styled(key_str, accent),
+                        Span::raw("  "),
+                        Span::styled(*desc, Style::new().dim()),
+                    ])
                 })
                 .collect();
 

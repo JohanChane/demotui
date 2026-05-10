@@ -16,14 +16,14 @@ mod_agent!(
         ([KeyCode::Char('j')], Key::MoveDown, ""),
         ([KeyCode::Char('G')], Key::GoBottom, ""),
         ([KeyCode::Char('g'), KeyCode::Char('g')], Key::GoTop, "Go to top"),
-        ([KeyCode::Char('d'), KeyCode::Char('d')], Key::Terminate, "Close connection"),
+        ([KeyCode::Char('d'), KeyCode::Char('d')], Key::Terminate, "Close"),
         ([KeyCode::Char('a'), KeyCode::Char('c')], Key::TerminateAll, "Close all"),
         ([KeyCode::Char('s'), KeyCode::Char('d')], Key::SortByDownload, "Sort by DL speed"),
         ([KeyCode::Char('s'), KeyCode::Char('u')], Key::SortByUpload, "Sort by UL speed"),
         ([KeyCode::Char('s'), KeyCode::Char('r')], Key::SortReset, "Reset sort"),
         ([KeyCode::Char('/')], Key::Search, "Search/Filter"),
         ([KeyCode::Char('p')], Key::TogglePause, "Pause/Resume"),
-        ([KeyCode::Char('f')], Key::FzfFind, "Find (fzf)"),
+        ([KeyCode::Char('f')], Key::FzfFind, "Find"),
     ]
 );
 
