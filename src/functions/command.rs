@@ -10,6 +10,21 @@ use std::{path::Path, process::Command};
 pub use platform::*;
 use utils::*;
 
+#[cfg(feature = "tui")]
+pub async fn resolve_sudo_password(needs_sudo: bool) -> Result<Option<String>> {
+    if !needs_sudo {
+        return Ok(None);
+    }
+    if !sudo_needs_password() {
+        return Ok(None);
+    }
+    match crate::tui::prompt_sudo_password().await {
+        Some(pw) if pw.is_empty() => Ok(None),
+        Some(pw) => Ok(Some(pw)),
+        None => Err(anyhow::anyhow!("cancelled")),
+    }
+}
+
 pub fn test_config(profile_path: Option<&Path>, enable_geodata_mode: bool) -> String {
     let cfg = &CONFIG.cfg_file.mihomo.core;
 
