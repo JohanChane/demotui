@@ -578,9 +578,11 @@ pvd:  # proxy-provider group name
 -   PPG: proxy-provider group
 -   PGG: proxy-group group
 
-展开规则:
--   PPG: 展开是 proxies
--   PGG: 展开是 proxy-group group。比如: auto-pvd0, auto-pvd1, ...
+替换规则:
+-   "${PPG.pvd}": 展开是 proxies
+-   "${PPG.pvd.pvd0}": 代表是`pvd0` proxy-provider
+-   "${PGG.auto}": 展开是 proxy-group groups。比如: auto-pvd0, auto-pvd1, ...
+-   "${PGG.auto.pvd0}": 代表是 `auto-pvd0` proxy-group
 
 ## Mihomo 的模板例子
 
