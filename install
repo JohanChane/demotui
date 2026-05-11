@@ -111,11 +111,11 @@ Restart=on-failure
 RestartSec=10s
 LimitNOFILE=infinity
 
-Environment="ENABLE_DEPRECATED_LEGACY_DNS_FAKEIP_OPTIONS=true"
-Environment="ENABLE_DEPRECATED_LEGACY_DNS_SERVERS=true"
-Environment="ENABLE_DEPRECATED_OUTBOUND_DNS_RULE_ITEM=true"
-Environment="ENABLE_DEPRECATED_GEOIP=true"
-Environment="ENABLE_DEPRECATED_GEOSITE=true"
+#Environment="ENABLE_DEPRECATED_LEGACY_DNS_FAKEIP_OPTIONS=true"
+#Environment="ENABLE_DEPRECATED_LEGACY_DNS_SERVERS=true"
+#Environment="ENABLE_DEPRECATED_OUTBOUND_DNS_RULE_ITEM=true"
+#Environment="ENABLE_DEPRECATED_GEOIP=true"
+#Environment="ENABLE_DEPRECATED_GEOSITE=true"
 
 [Install]
 WantedBy=multi-user.target
@@ -137,15 +137,15 @@ create_clashtui_config() {
     backup_file "$MIHOMO_USER_CONFIG_DIR/config.yaml"
 
     tee "$MIHOMO_USER_CONFIG_DIR/config.yaml" >/dev/null <<'EOF'
-core-type: mihomo
-basic:
-  clash_config_dir: '/opt/clashtui/mihomo/config'
-  clash_bin_path: '/opt/clashtui/mihomo/mihomo'
-  clash_config_path: '/opt/clashtui/mihomo/config/config.yaml'
-  timeout: null
-service:
-  clash_srv_name: 'clashtui_mihomo'
-  is_user: false
+mihomo:
+  core:
+    config_dir: /opt/clashtui/mihomo/config
+    bin_path: /opt/clashtui/mihomo/mihomo
+    config_path: /opt/clashtui/mihomo/config/config.yaml
+  core_service:
+    service_name: clashtui_mihomo
+    is_user: false
+timeout:
 extra:
   edit_cmd:
   open_dir_cmd:
@@ -158,14 +158,15 @@ EOF
     backup_file "$SINGBOX_USER_CONFIG_DIR/config.yaml"
 
     tee "$SINGBOX_USER_CONFIG_DIR/config.yaml" >/dev/null <<'EOF'
-core-type: sing-box
 singbox:
-  singbox_bin_path: '/opt/clashtui/sing-box/sing-box'
-  singbox_config_dir: '/opt/clashtui/sing-box/config'
-  singbox_config_path: '/opt/clashtui/sing-box/config/config.json'
-service:
-  singbox_srv_name: 'clashtui_singbox'
-  is_user: false
+  core:
+    bin_path: /opt/clashtui/sing-box/sing-box
+    config_dir: /opt/clashtui/sing-box/config
+    config_path: /opt/clashtui/sing-box/config/config.json
+  core_service:
+    service_name: clashtui_singbox
+    is_user: false
+timeout:
 extra:
   edit_cmd:
   open_dir_cmd:
@@ -180,29 +181,30 @@ EOF
     backup_file "$SINGBOX_USER_CONFIG_DIR/config.yaml"
 
     tee "$MIHOMO_USER_CONFIG_DIR/config.yaml" >/dev/null <<'EOF'
-core-type: mihomo
-basic:
-  clash_config_dir: '/opt/clashtui/mihomo/config'
-  clash_bin_path: '/opt/clashtui/mihomo/mihomo'
-  clash_config_path: '/opt/clashtui/mihomo/config/config.yaml'
-  timeout: null
-service:
-  clash_srv_name: 'clashtui_mihomo'
-  is_user: false
+mihomo:
+  core:
+    config_dir: /opt/clashtui/mihomo/config
+    bin_path: /opt/clashtui/mihomo/mihomo
+    config_path: /opt/clashtui/mihomo/config/config.yaml
+  core_service:
+    service_name: clashtui_mihomo
+    is_user: false
+timeout:
 extra:
   edit_cmd:
   open_dir_cmd:
 EOF
 
     tee "$SINGBOX_USER_CONFIG_DIR/config.yaml" >/dev/null <<'EOF'
-core-type: sing-box
 singbox:
-  singbox_bin_path: '/opt/clashtui/sing-box/sing-box'
-  singbox_config_dir: '/opt/clashtui/sing-box/config'
-  singbox_config_path: '/opt/clashtui/sing-box/config/config.json'
-service:
-  singbox_srv_name: 'clashtui_singbox'
-  is_user: false
+  core:
+    bin_path: /opt/clashtui/sing-box/sing-box
+    config_dir: /opt/clashtui/sing-box/config
+    config_path: /opt/clashtui/sing-box/config/config.json
+  core_service:
+    service_name: clashtui_singbox
+    is_user: false
+timeout:
 extra:
   edit_cmd:
   open_dir_cmd:
@@ -236,14 +238,28 @@ EOF
   fi
 
   if [ "$core_type" = "mihomo" ] || [ "$core_type" = "all" ]; then
-    mkdir -p "$MIHOMO_USER_CONFIG_DIR/profile_yamls"
+    mkdir -p "$MIHOMO_USER_CONFIG_DIR/profiles"
     mkdir -p "$MIHOMO_USER_CONFIG_DIR/templates"
     local mihomo_template_proxy_providers_path
     mihomo_template_proxy_providers_path="$MIHOMO_USER_CONFIG_DIR/template_proxy_providers.yaml"
     if [ ! -f "$mihomo_template_proxy_providers_path" ]; then
       tee "$mihomo_template_proxy_providers_path" >/dev/null <<'EOF'
-# Place each proxy-provider group with name and url under a group key
-pvd: []
+# Define proxy-provider subscription URLs here, organized by group.
+# In templates use ${PPG.<group>} to reference all providers in a group,
+# or ${PPG.<group>.<provider>} for a specific one.
+#
+# Format:
+#   <group-name>:
+#     <provider-name>: "<subscription-url>"
+#
+# Clashtui's built-in templates use the convention:
+#   - Group: pvd
+#   - Providers: pvd0, pvd1, ...
+#
+# Example (following clashtui convention):
+#   pvd:
+#     pvd0: "https://example.com/sub1.yaml"
+#     pvd1: "https://example.com/sub2.yaml"
 EOF
     fi
 
@@ -268,14 +284,28 @@ EOF
   fi
 
   if [ "$core_type" = "sing-box" ] || [ "$core_type" = "all" ]; then
-    mkdir -p "$SINGBOX_USER_CONFIG_DIR/profile_jsons"
+    mkdir -p "$SINGBOX_USER_CONFIG_DIR/profiles"
     mkdir -p "$SINGBOX_USER_CONFIG_DIR/templates"
     local singbox_template_proxy_providers_path
     singbox_template_proxy_providers_path="$SINGBOX_USER_CONFIG_DIR/template_proxy_providers.yaml"
     if [ ! -f "$singbox_template_proxy_providers_path" ]; then
       tee "$singbox_template_proxy_providers_path" >/dev/null <<'EOF'
-# Place each proxy-provider group with name and url under a group key
-pvd: []
+# Define proxy-provider subscription URLs here, organized by group.
+# In templates use ${PPG.<group>} to reference all providers in a group,
+# or ${PPG.<group>.<provider>} for a specific one.
+#
+# Format:
+#   <group-name>:
+#     <provider-name>: "<subscription-url>"
+#
+# Clashtui's built-in templates use the convention:
+#   - Group: pvd
+#   - Providers: pvd0, pvd1, ...
+#
+# Example (following clashtui convention):
+#   pvd:
+#     pvd0: "https://example.com/sub1.yaml"
+#     pvd1: "https://example.com/sub2.yaml"
 EOF
     fi
   fi
@@ -631,7 +661,6 @@ uninstall() {
     return 1
   fi
 
-  sudo rm -f /usr/lib/systemd/system/clashtui_mihomo.service
   sudo rm -f /usr/lib/systemd/system/clashtui_mihomo.service
   sudo rm -f /usr/lib/systemd/system/clashtui_singbox.service
   sudo systemctl daemon-reload
