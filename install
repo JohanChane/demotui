@@ -6,7 +6,8 @@ SINGBOX_USER_CONFIG_DIR=${CLASHTUI_CONFIG_DIR}/sing-box
 CLASHTUI_INSTALL_DIR=/opt/clashtui
 MIHOMO_CONFIG_DIR=${CLASHTUI_INSTALL_DIR}/mihomo/config
 SINGBOX_CONFIG_DIR=${CLASHTUI_INSTALL_DIR}/sing-box/config
-INSTALL_RES_URL_PREFIX=https://raw.githubusercontent.com/JohanChane/clashtui/refs/heads/main/InstallRes
+BRANCH=main
+INSTALL_RES_URL_PREFIX=https://raw.githubusercontent.com/JohanChane/clashtui/refs/heads/${BRANCH}/InstallRes
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
