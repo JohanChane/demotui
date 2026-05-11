@@ -107,14 +107,18 @@ ClashTui 使用 Linux 组文件权限管理 Core 的文件: User 加入每个 Co
 
 使用 basic_core_config 的顶层 key 覆盖 profile 的顶层 key 即可。
 
+我觉得 Mihomo 的合并规则比 sing-box 更加好, 不容易污染。因为 mihomo 的顶层字段 (Section) 耦合度不高。
+
 ### sing-box 配置的合并
+
+因为 sing-box 的顶层字段 (Section) 耦合度比较高, 所以使用以下的合并方式。
 
 sing-box 的合并由 demotui 自行实现递归深合并，不再依赖外部 `sing-box merge` 命令。
 
 合并算法：
 
-- 对象 (object): 递归合并。override 中存在的 key 覆盖 profile 的对应值；profile 中独有的 key 保留。
-- 数组 (array): 整体替换。override 中存在的数组完全替换 profile 的对应数组。
+- 对象 (object): 递归合并。override 中存在的 key 覆盖 profile 的对应值；profile 中独有的 key 保留 (没有交集的 key)。
+- 数组 (array): 整体替换。override 中存在的数组完全替换 profile 的对应数组。可以防止出现多个 inbounds。
 - 标量 (string, number, bool, null): 直接覆盖。
 
 合并时机：用户选择 profile 时触发。流程为：
@@ -200,8 +204,6 @@ profile.json:                           core_override_config.json:
 - 使用标准 sing-box JSON 语法可降低学习门槛，用户查阅 sing-box 文档即可。
 - 不依赖 `sing-box merge` 可以避免外部命令的版本兼容问题，且合并逻辑完全由 demotui 控制。
 - 数组整体替换（而非元素级合并）是 GUI.for.SingBox 的一致行为，且语义明确：用户写了哪些 inbound 就是哪些。
-
-
 
 ## Profile 的管理设计
 
@@ -578,11 +580,15 @@ pvd:  # proxy-provider group name
 -   PPG: proxy-provider group
 -   PGG: proxy-group group
 
-替换规则:
+展开规则:
+-   PPG: 展开为 proxies
+-   PGG: 展开为 proxy-group(s)
+
+For example: 展开规则
 -   "${PPG.pvd}": 展开是 proxies
--   "${PPG.pvd.pvd0}": 代表是`pvd0` proxy-provider
--   "${PGG.auto}": 展开是 proxy-group groups。比如: auto-pvd0, auto-pvd1, ...
--   "${PGG.auto.pvd0}": 代表是 `auto-pvd0` proxy-group
+-   "${PPG.pvd.pvd0}": 展开是 `pvd0` proxy-provider 的 proxies
+-   "${PGG.auto}": 展开是 proxy-group groups。比如: `auto-pvd0, auto-pvd1, ...`
+-   "${PGG.auto.pvd0}": 代表是一个 proxy-group。e.g. `auto-pvd0`
 
 ## Mihomo 的模板例子
 
