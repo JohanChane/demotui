@@ -253,9 +253,9 @@ EOF
 #   <group-name>:
 #     <provider-name>: "<subscription-url>"
 #
-# Clashtui's built-in templates use the convention:
-#   - Group: pvd
-#   - Providers: pvd0, pvd1, ...
+# Clashtui's built-in templates only use the group level
+# (e.g. ${PPG.pvd}, not ${PPG.pvd.pvd0}). Provider names
+# (pvd0, pvd1, ...) are freely defined by the user.
 #
 # Example (following clashtui convention):
 #   pvd:
@@ -299,9 +299,9 @@ EOF
 #   <group-name>:
 #     <provider-name>: "<subscription-url>"
 #
-# Clashtui's built-in templates use the convention:
-#   - Group: pvd
-#   - Providers: pvd0, pvd1, ...
+# Clashtui's built-in templates only use the group level
+# (e.g. ${PPG.pvd}, not ${PPG.pvd.pvd0}). Provider names
+# (pvd0, pvd1, ...) are freely defined by the user.
 #
 # Example (following clashtui convention):
 #   pvd:
