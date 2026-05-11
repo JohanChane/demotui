@@ -147,6 +147,31 @@ enum ModeCommand {
     Global,
 }
 
+#[derive(Clone, clap::ValueEnum)]
+#[cfg_attr(debug_assertions, derive(Debug))]
+enum ProfileTypeFilter {
+    /// file-based profiles
+    File,
+    /// URL-based profiles
+    Url,
+    /// template-based profiles
+    Template,
+    /// sing-box profiles
+    Singbox,
+}
+
+impl ProfileTypeFilter {
+    fn matches(&self, dtype: &crate::config::database::ProfileType) -> bool {
+        match (self, dtype) {
+            (ProfileTypeFilter::File, crate::config::database::ProfileType::File) => true,
+            (ProfileTypeFilter::Url, crate::config::database::ProfileType::Url(_)) => true,
+            (ProfileTypeFilter::Template, crate::config::database::ProfileType::Template { .. }) => true,
+            (ProfileTypeFilter::Singbox, crate::config::database::ProfileType::Singbox) => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(clap::Subcommand)]
 #[cfg_attr(debug_assertions, derive(Debug))]
 enum ProfileCommand {
@@ -166,6 +191,9 @@ enum ProfileCommand {
         /// update profile with proxyprovider removed
         #[arg(long)]
         without_proxyprovider: bool,
+        /// filter by profile type
+        #[arg(long, value_enum)]
+        r#type: Option<ProfileTypeFilter>,
     },
     /// select profile
     Select {
@@ -178,6 +206,9 @@ enum ProfileCommand {
         /// without domain hint
         #[arg(long)]
         name_only: bool,
+        /// filter by profile type
+        #[arg(long, value_enum)]
+        r#type: Option<ProfileTypeFilter>,
     },
 }
 

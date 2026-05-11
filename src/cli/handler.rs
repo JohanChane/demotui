@@ -27,6 +27,7 @@ fn handle_profile(command: ProfileCommand) -> Result<()> {
             name,
             with_proxy,
             without_proxyprovider,
+            r#type: type_filter,
         } => {
             let profiles: Vec<crate::config::database::Profile> = if all {
                 crate::functions::file::profile::db::get_all()
@@ -43,8 +44,18 @@ fn handle_profile(command: ProfileCommand) -> Result<()> {
                 return Ok(());
             };
 
-            if profiles.is_empty() && all {
-                println!("No profiles in database.");
+            let profiles: Vec<_> = if let Some(filter) = &type_filter {
+                profiles.into_iter().filter(|pf| filter.matches(&pf.dtype)).collect()
+            } else {
+                profiles
+            };
+
+            if profiles.is_empty() {
+                if type_filter.is_some() {
+                    println!("No profiles match the given type filter.");
+                } else if all {
+                    println!("No profiles in database.");
+                }
                 return Ok(());
             }
 
@@ -86,11 +97,23 @@ fn handle_profile(command: ProfileCommand) -> Result<()> {
             }
             Ok(())
         }
-        ProfileCommand::List { name_only } => {
-            let mut pfs = crate::functions::file::profile::db::get_all();
+        ProfileCommand::List {
+            name_only,
+            r#type: type_filter,
+        } => {
+            let pfs = crate::functions::file::profile::db::get_all();
+            let mut pfs: Vec<_> = if let Some(filter) = &type_filter {
+                pfs.into_iter().filter(|pf| filter.matches(&pf.dtype)).collect()
+            } else {
+                pfs
+            };
             pfs.sort_by(|a, b| a.name.cmp(&b.name));
             if pfs.is_empty() {
-                println!("No profiles found.");
+                if type_filter.is_some() {
+                    println!("No profiles match the given type filter.");
+                } else {
+                    println!("No profiles found.");
+                }
                 return Ok(());
             }
             for pf in &pfs {
