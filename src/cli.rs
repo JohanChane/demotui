@@ -1,8 +1,8 @@
 mod utils;
-// mod handler;
+mod handler;
 mod widgets;
 
-// pub use handler::handle_cli;
+pub use handler::handle_cli;
 pub use widgets::{Confirm, Select};
 
 #[derive(clap::Parser)]
@@ -18,7 +18,7 @@ pub use widgets::{Confirm, Select};
 /// A tool for mihomo, also support other Clash API
 pub struct Cmds {
     #[command(subcommand)]
-    command: Option<ArgCommand>,
+    pub(crate) command: Option<ArgCommand>,
     #[arg(long, require_equals=true, num_args=0..=1, default_missing_value=None)]
     // `clashtui --generate-shell-completion` in fact get `Some(None)`
     // while `clashtui` get `None`
@@ -83,7 +83,7 @@ impl Cmds {
 
 #[derive(clap::Subcommand)]
 #[cfg_attr(debug_assertions, derive(Debug))]
-enum ArgCommand {
+pub(crate) enum ArgCommand {
     /// profile related
     Profile {
         #[command(subcommand)]
