@@ -435,7 +435,7 @@ impl TabContent for Logs {
 
     fn render(&self, f: &mut Frame, area: Rect, _state: &mut Self::State) {
         let block = Block::bordered()
-            .border_style(Theme::get().tab.tab_focused)
+            .border_style(Theme::get().section("logs").border)
             .title(Self::TITLE);
 
         let mut title_parts = Vec::new();
@@ -476,7 +476,7 @@ impl TabContent for Logs {
             .map(|line| ListItem::new(Line::raw(line)))
             .collect();
 
-        let highlight_style = Theme::get().tab.item_highlighted;
+        let highlight_style = Theme::get().section("logs").highlight;
         let list = List::new(visible_lines)
             .block(block)
             .highlight_style(highlight_style);
