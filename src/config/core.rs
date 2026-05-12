@@ -76,7 +76,13 @@ pub struct Extra {
 }
 impl Default for Extra {
     fn default() -> Self {
-        let common_cmd = if cfg!(windows) { "start %s" } else { "open %s" };
+        let common_cmd = if cfg!(windows) {
+            "start %s"
+        } else if cfg!(target_os = "macos") {
+            "open %s"
+        } else {
+            "xdg-open %s"
+        };
         Self {
             edit_cmd: common_cmd.to_owned(),
             open_dir_cmd: common_cmd.to_owned(),
