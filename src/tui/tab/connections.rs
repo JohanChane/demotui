@@ -442,7 +442,8 @@ impl TabContent for Connections {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, _state: &mut Self::State) {
-        let section = Theme::get().section("connections");
+        let theme = Theme::get();
+        let section = theme.section("connections");
         let block = Block::bordered()
             .border_style(section.border)
             .title(Self::TITLE);
@@ -502,7 +503,7 @@ impl TabContent for Connections {
             )
         };
 
-        let header_style = Theme::get().tab.tab_focused;
+        let header_style = section.border;
         let header_cells = [
             sort_header(self.sort_state, SortColumn::Host, HOST_COL),
             sort_header(self.sort_state, SortColumn::Rule, RULE_COL),
@@ -552,7 +553,7 @@ impl TabContent for Connections {
             })
             .collect();
 
-        let highlight_style = Theme::get().tab.item_highlighted;
+        let highlight_style = section.highlight;
         let table = Table::new(rows, widths)
             .header(header)
             .block(block.title_bottom(Line::raw(count_text).right_aligned()))
