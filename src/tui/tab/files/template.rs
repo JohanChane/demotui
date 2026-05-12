@@ -26,7 +26,7 @@ mod_agent!(
     ]
 );
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, serde::Serialize)]
 pub enum Key {
     Switch,
     MoveUp,
@@ -93,7 +93,7 @@ impl<'de> serde::Deserialize<'de> for Key {
     }
 }
 
-#[derive(Clone, Copy, Debug, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Action {
     Generate,
     Delete,

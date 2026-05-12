@@ -29,7 +29,7 @@ mod_agent!(
     ]
 );
 
-#[derive(Clone, Copy, serde::Deserialize)]
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize)]
 pub enum Key {
     MoveUp,
     MoveDown,

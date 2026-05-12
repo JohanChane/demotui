@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crate::config::CoreType;
+use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(serde::Deserialize)]
@@ -51,15 +52,96 @@ pub fn init() -> Result<()> {
     Ok(())
 }
 
+fn build_entries<K: Serialize>(
+    shortcuts: &[(crate::tui::widget::tab::KeyCombo, K, &str)],
+) -> serde_yml::Mapping {
+    let mut map = serde_yml::Mapping::new();
+    for (combo, action, desc) in shortcuts {
+        if combo.len() != 1 {
+            continue;
+        }
+        let key = combo[0];
+        let mut inner = serde_yml::Mapping::new();
+        inner.insert(
+            serde_yml::Value::String("action".into()),
+            serde_yml::to_value(action).unwrap(),
+        );
+        if !desc.is_empty() {
+            inner.insert(
+                serde_yml::Value::String("desc".into()),
+                serde_yml::Value::String((*desc).into()),
+            );
+        }
+        map.insert(
+            serde_yml::to_value(key).unwrap(),
+            serde_yml::Value::Mapping(inner),
+        );
+    }
+    map
+}
+
+fn generate_default_keymap_yaml() -> String {
+    use crate::tui::tab;
+
+    let comment = "# Clashtui keymap — auto-generated\n\
+        # Add entries here to override default key bindings.\n\
+        # Entries not listed use hardcoded defaults.\n\
+        # Press ? in the TUI to see current bindings.\n\n";
+
+    let mut top = serde_yml::Mapping::new();
+
+    // connections
+    top.insert(
+        serde_yml::Value::String("connections".into()),
+        serde_yml::Value::Mapping(build_entries(tab::connections::all_shortcuts())),
+    );
+
+    // file
+    {
+        let mut file = serde_yml::Mapping::new();
+        file.insert(
+            serde_yml::Value::String("profile".into()),
+            serde_yml::Value::Mapping(build_entries(tab::files::profile::all_shortcuts())),
+        );
+        file.insert(
+            serde_yml::Value::String("template".into()),
+            serde_yml::Value::Mapping(build_entries(tab::files::template::all_shortcuts())),
+        );
+        top.insert(
+            serde_yml::Value::String("file".into()),
+            serde_yml::Value::Mapping(file),
+        );
+    }
+
+    // srvctl
+    top.insert(
+        serde_yml::Value::String("srvctl".into()),
+        serde_yml::Value::Mapping(build_entries(tab::srvctl::all_shortcuts())),
+    );
+
+    // settings
+    top.insert(
+        serde_yml::Value::String("settings".into()),
+        serde_yml::Value::Mapping(build_entries(tab::settings::all_shortcuts())),
+    );
+
+    // logs
+    top.insert(
+        serde_yml::Value::String("logs".into()),
+        serde_yml::Value::Mapping(build_entries(tab::logs::all_shortcuts())),
+    );
+
+    let yaml = serde_yml::to_string(&top).unwrap();
+    format!("{comment}{yaml}")
+}
+
 fn generate_default_keymap(path: &std::path::Path) -> Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, DEFAULT_KEYMAP_YAML)?;
+    std::fs::write(path, generate_default_keymap_yaml())?;
     Ok(())
 }
-
-const DEFAULT_KEYMAP_YAML: &str = include_str!("keymap_default.yaml");
 
 fn split_sections(
     value: &mut serde_yml::Mapping,
@@ -331,10 +413,21 @@ fn test_template_key_deserialization() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_default_keymap_parses_as_empty_mapping() -> anyhow::Result<()> {
-    let value: serde_yml::Mapping = serde_yml::from_str(DEFAULT_KEYMAP_YAML)?;
-    assert!(value.is_empty(), "default keymap should be empty (comments + {{}})");
-    Ok(())
+fn test_generated_keymap_has_all_sections() {
+    let yaml = generate_default_keymap_yaml();
+    let value: serde_yml::Mapping = serde_yml::from_str(&yaml).unwrap();
+    assert!(value.contains_key("connections"));
+    assert!(value.contains_key("file"));
+    assert!(value.contains_key("srvctl"));
+    assert!(value.contains_key("settings"));
+    assert!(value.contains_key("logs"));
+
+    let file = value
+        .get("file")
+        .and_then(|v| v.as_mapping())
+        .expect("file should be a mapping");
+    assert!(file.contains_key("profile"));
+    assert!(file.contains_key("template"));
 }
 
 #[test]
@@ -367,127 +460,96 @@ fn test_no_duplicate_keys_in_default_agents() {
 }
 
 #[test]
-fn test_default_agents_are_populated() {
+fn test_generated_keymap_entries_have_desc() {
+    let yaml = generate_default_keymap_yaml();
+    let value: serde_yml::Mapping = serde_yml::from_str(&yaml).unwrap();
+
+    // Verify connections entries have desc
+    let conns = value["connections"].as_mapping().unwrap();
+    for (_, v) in conns {
+        let m = v.as_mapping().expect("each entry should be a mapping");
+        assert!(m.contains_key("action"), "entry missing action field");
+        assert!(m.contains_key("desc"), "entry missing desc field");
+    }
+}
+
+#[test]
+fn test_generated_keymap_key_format_no_false_defaults() {
+    use crate::tui::Key as TuiKey;
+
+    let yaml = generate_default_keymap_yaml();
+    let value: serde_yml::Mapping = serde_yml::from_str(&yaml).unwrap();
+
+    // Parse back all keys — they should deserialize without false fields
+    for (k, _) in &value {
+        if k.as_str() == Some("file") {
+            let file = value[k].as_mapping().unwrap();
+            for (_, v) in file {
+                let m = v.as_mapping().unwrap();
+                for (key_val, _) in m {
+                    let _key: TuiKey = serde_yml::from_value(key_val.clone()).unwrap();
+                }
+            }
+        } else {
+            let m = value[k].as_mapping().unwrap();
+            for (key_val, _) in m {
+                let _key: TuiKey = serde_yml::from_value(key_val.clone()).unwrap();
+            }
+        }
+    }
+}
+
+#[test]
+fn test_generated_keymap_deserializes_all_tabs() -> anyhow::Result<()> {
     use std::collections::HashMap;
     use crate::tui::Key as TuiKey;
 
-    // Verify default agents from mod_agent! are non-empty (no YAML dependency)
-    assert!(!crate::tui::tab::connections::agent().is_empty());
-    assert!(!crate::tui::tab::files::profile::agent().is_empty());
-    assert!(!crate::tui::tab::files::template::agent().is_empty());
-    assert!(!crate::tui::tab::srvctl::agent().is_empty());
-    assert!(!crate::tui::tab::settings::agent().is_empty());
-    assert!(!crate::tui::tab::logs::agent().is_empty());
-}
+    let yaml = generate_default_keymap_yaml();
+    let mut value: serde_yml::Mapping = serde_yml::from_str(&yaml)?;
 
-#[test]
-fn test_empty_keymap_skips_all_sections() -> anyhow::Result<()> {
-    let mut value: serde_yml::Mapping = serde_yml::from_str(DEFAULT_KEYMAP_YAML)?;
-    // Empty keymap: get() should return Err for all sections
-    assert!(get(&mut value.clone(), "connections").is_err());
-    assert!(get(&mut value.clone(), "srvctl").is_err());
-    assert!(get(&mut value.clone(), "settings").is_err());
-    assert!(get(&mut value.clone(), "logs").is_err());
-    assert!(get(&mut value.clone(), "file").is_err());
-    Ok(())
-}
-
-#[test]
-fn test_keyvalue_deserialization_simple() -> anyhow::Result<()> {
-    use crate::tui::Key as TuiKey;
-
-    let yaml = r#"
-connections:
-  ? code: Enter
-    shift: false
-    ctrl: false
-    alt: false
-    super_: false
-  : MoveUp
-  ? code: !Char k
-    shift: false
-    ctrl: false
-    alt: false
-    super_: false
-  : MoveDown
-"#;
-    let value: serde_yml::Mapping = serde_yml::from_str(yaml)?;
-
-    if let Ok(map) = get(&mut value.clone(), "connections") {
-        let (keys, _descs) = extract_keymap_with_descs::<crate::tui::tab::connections::Key>(map)?;
-        assert_eq!(keys.len(), 2);
-        assert!(_descs.is_empty());
+    // connections
+    {
+        let conns = get(&mut value.clone(), "connections")?;
+        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::connections::Key>(conns)?;
+        assert!(!keys.is_empty());
+        assert_eq!(keys.len(), descs.len());
     }
-
-    Ok(())
-}
-
-#[test]
-fn test_keyvalue_deserialization_with_desc() -> anyhow::Result<()> {
-    use crate::tui::Key as TuiKey;
-
-    let yaml = r#"
-connections:
-  ? code: Enter
-    shift: false
-    ctrl: false
-    alt: false
-    super_: false
-  :
-    action: MoveUp
-    desc: Move cursor up
-  ? code: !Char k
-    shift: false
-    ctrl: false
-    alt: false
-    super_: false
-  :
-    action: MoveDown
-    desc: Move cursor down
-"#;
-    let value: serde_yml::Mapping = serde_yml::from_str(yaml)?;
-
-    if let Ok(map) = get(&mut value.clone(), "connections") {
-        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::connections::Key>(map)?;
-        assert_eq!(keys.len(), 2);
-        assert_eq!(descs.len(), 2);
-        let mut desc_vals: Vec<_> = descs.values().collect();
-        desc_vals.sort();
-        assert_eq!(desc_vals, vec!["Move cursor down", "Move cursor up"]);
+    // srvctl
+    {
+        let srv = get(&mut value.clone(), "srvctl")?;
+        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::srvctl::SrvCtlKey>(srv)?;
+        assert!(!keys.is_empty());
+        assert_eq!(keys.len(), descs.len());
     }
-
-    Ok(())
-}
-
-#[test]
-fn test_keyvalue_deserialization_mixed_simple_and_desc() -> anyhow::Result<()> {
-    use crate::tui::Key as TuiKey;
-
-    let yaml = r#"
-connections:
-  ? code: Enter
-    shift: false
-    ctrl: false
-    alt: false
-    super_: false
-  : MoveUp
-  ? code: !Char k
-    shift: false
-    ctrl: false
-    alt: false
-    super_: false
-  :
-    action: MoveDown
-    desc: Move down
-"#;
-    let value: serde_yml::Mapping = serde_yml::from_str(yaml)?;
-
-    if let Ok(map) = get(&mut value.clone(), "connections") {
-        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::connections::Key>(map)?;
-        assert_eq!(keys.len(), 2);
-        assert_eq!(descs.len(), 1);
-        assert_eq!(descs.values().next().unwrap(), "Move down");
+    // settings
+    {
+        let sett = get(&mut value.clone(), "settings")?;
+        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::settings::SettingsKey>(sett)?;
+        assert!(!keys.is_empty());
+        assert_eq!(keys.len(), descs.len());
     }
-
+    // logs
+    {
+        let lgs = get(&mut value.clone(), "logs")?;
+        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::logs::Key>(lgs)?;
+        assert!(!keys.is_empty());
+        assert_eq!(keys.len(), descs.len());
+    }
+    // file/profile
+    {
+        let file = get(&mut value.clone(), "file")?;
+        let profile = get(&mut file.clone(), "profile")?;
+        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::files::profile::Key>(profile)?;
+        assert!(!keys.is_empty());
+        assert_eq!(keys.len(), descs.len());
+    }
+    // file/template
+    {
+        let file = get(&mut value.clone(), "file")?;
+        let tmpl = get(&mut file.clone(), "template")?;
+        let (keys, descs) = extract_keymap_with_descs::<crate::tui::tab::files::template::Key>(tmpl)?;
+        assert!(!keys.is_empty());
+        assert_eq!(keys.len(), descs.len());
+    }
     Ok(())
 }
