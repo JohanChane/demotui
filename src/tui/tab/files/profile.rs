@@ -6,6 +6,8 @@ use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Mutex, atomic::Ordering};
 
+use ratatui::style::Style;
+
 use super::*;
 
 /// Traffic usage info parsed from subscription-userinfo header.
@@ -336,11 +338,16 @@ impl DualTabContent for Profile {
             state.select(Some(0));
         }
 
+        let theme = Theme::get();
+        let section = theme.section("file");
+        let unfocused_border = section.border.fg(Color::Rgb(100, 100, 100));
+        let unfocused_highlight = Style::new();
+
         let block = Block::bordered()
             .border_style(if is_focused {
-                Theme::get().tab.tab_focused
+                section.border
             } else {
-                Theme::get().tab.dualtab_unfocused
+                unfocused_border
             })
             .title(Self::TITLE);
 
@@ -373,7 +380,7 @@ impl DualTabContent for Profile {
                     spans.push(Span::raw(format!("{} ", spinner_chars[spinner_idx])));
                 } else if value == current.as_str() {
                     spans.push(
-                        Span::raw("* ").style(Theme::get().tab.tab_focused),
+                        Span::raw("* ")                .style(section.border),
                     );
                 } else {
                     spans.push(Span::raw("  "));
@@ -381,7 +388,7 @@ impl DualTabContent for Profile {
 
                 spans.push(Span::raw(value.as_str()));
                 spans.push(Span::raw(" "));
-                spans.push(Span::raw(extra.as_str()).style(Theme::get().profile_tab.update_interval));
+                spans.push(Span::raw(extra.as_str()).style(section.secondary));
 
                 // Traffic info
                 if self.traffic_display_mode != TrafficDisplayMode::Off {
@@ -425,9 +432,9 @@ impl DualTabContent for Profile {
         let widget = List::from_iter(iter)
             .block(block)
             .highlight_style(if is_focused {
-                Theme::get().tab.item_highlighted
+                section.highlight
             } else {
-                Theme::get().tab.item_unhighlighted
+                unfocused_highlight
             });
         f.render_stateful_widget(widget, area, state);
     }

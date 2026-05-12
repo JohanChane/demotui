@@ -2,6 +2,7 @@ use super::*;
 use crate::functions::command::edit;
 use crate::functions::file::template::*;
 use crate::tui::widget::popmsg::Confirm;
+use ratatui::style::Style;
 use std::cell::Cell;
 
 mod_agent!(
@@ -211,11 +212,16 @@ impl DualTabContentMate for Template {
             state.select(Some(0));
         }
 
+        let theme = Theme::get();
+        let section = theme.section("file");
+        let unfocused_border = section.border.fg(Color::Rgb(100, 100, 100));
+        let unfocused_highlight = Style::new();
+
         let block = Block::bordered()
             .border_style(if is_focused {
-                Theme::get().tab.tab_focused
+                section.border
             } else {
-                Theme::get().tab.dualtab_unfocused
+                unfocused_border
             })
             .title(Self::TITLE);
 
@@ -238,9 +244,9 @@ impl DualTabContentMate for Template {
         let widget = List::from_iter(iter)
             .block(block)
             .highlight_style(if is_focused {
-                Theme::get().tab.item_highlighted
+                section.highlight
             } else {
-                Theme::get().tab.item_unhighlighted
+                unfocused_highlight
             });
         f.render_stateful_widget(widget, area, state);
     }
