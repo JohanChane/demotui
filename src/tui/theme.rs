@@ -167,11 +167,15 @@ fn make_default_palette() -> SectionPaletteDef {
     }
 }
 
+const SECTION_NAMES: &[&str] = &[
+    "connections", "proxies", "settings", "srvctl", "logs", "status", "file",
+];
+
 fn build_default_theme() -> Theme {
     let empty = SectionPaletteDef::default();
     let default = make_default_palette();
     let mut sections = HashMap::new();
-    for name in &["connections", "proxies", "settings", "srvctl", "logs", "status", "file"] {
+    for name in SECTION_NAMES {
         sections.insert(name.to_string(), ComputedSectionTheme::from_palette(&empty, &default));
     }
     Theme {
@@ -247,7 +251,6 @@ pub(crate) fn load_theme(path: &std::path::Path) -> anyhow::Result<Theme> {
         k.as_str().is_some_and(|s| legacy.contains(&s))
     });
     if has_legacy {
-        log::warn!("theme.yaml uses old format — falling back to default theme");
         anyhow::bail!("old theme format detected");
     }
 
