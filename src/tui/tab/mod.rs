@@ -203,7 +203,7 @@ pub trait TuiTab: super::TuiWidget {
 pub(crate) mod connections;
 pub(crate) mod files;
 pub(crate) mod logs;
-mod proxies;
+pub(crate) mod proxies;
 pub(crate) mod settings;
 pub(crate) mod srvctl;
 mod status;

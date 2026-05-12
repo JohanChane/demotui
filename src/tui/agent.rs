@@ -88,6 +88,7 @@ fn generate_default_keymap_yaml() -> String {
     out.push_str("# Core-specific sections (mihomo / sing-box) override common sections.\n\n");
 
     append_section(&mut out, "connections", "", tab::connections::all_shortcuts());
+    append_section(&mut out, "proxies", "", tab::proxies::all_shortcuts());
 
     out.push_str("file:\n");
     append_section(&mut out, "profile", "  ", tab::files::profile::all_shortcuts());
@@ -437,6 +438,7 @@ fn test_generated_keymap_has_all_sections() {
     let yaml = generate_default_keymap_yaml();
     let value: serde_yml::Mapping = serde_yml::from_str(&yaml).unwrap();
     assert!(value.contains_key("connections"));
+    assert!(value.contains_key("proxies"));
     assert!(value.contains_key("file"));
     assert!(value.contains_key("srvctl"));
     assert!(value.contains_key("settings"));
