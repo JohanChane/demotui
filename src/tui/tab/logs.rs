@@ -11,11 +11,11 @@ newtype_tab!(LogsTab(Tab<Logs>));
 mod_agent!(
     Key,
     [
-        ([KeyCode::Up], Key::MoveUp, ""),
-        ([KeyCode::Down], Key::MoveDown, ""),
-        ([KeyCode::Char('k')], Key::MoveUp, ""),
-        ([KeyCode::Char('j')], Key::MoveDown, ""),
-        ([KeyCode::Char('G')], Key::GoBottom, ""),
+        ([KeyCode::Up], Key::MoveUp, "Move up"),
+        ([KeyCode::Down], Key::MoveDown, "Move down"),
+        ([KeyCode::Char('k')], Key::MoveUp, "Move up"),
+        ([KeyCode::Char('j')], Key::MoveDown, "Move down"),
+        ([KeyCode::Char('G')], Key::GoBottom, "Go to bottom"),
         ([KeyCode::Char('g'), KeyCode::Char('g')], Key::GoTop, "Go to top"),
         ([KeyCode::Char('/')], Key::Search, "Search/Filter"),
         ([KeyCode::Char('p')], Key::TogglePause, "Pause/Resume"),

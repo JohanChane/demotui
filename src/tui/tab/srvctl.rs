@@ -8,11 +8,11 @@ mod_agent!(
     SrvCtlKey,
     [
         ([KeyCode::Enter], SrvCtlKey::Execute, "Execute"),
-        ([KeyCode::Esc], SrvCtlKey::Esc, ""),
-        ([KeyCode::Up], SrvCtlKey::MoveUp, ""),
-        ([KeyCode::Down], SrvCtlKey::MoveDown, ""),
-        ([KeyCode::Char('k')], SrvCtlKey::MoveUp, ""),
-        ([KeyCode::Char('j')], SrvCtlKey::MoveDown, ""),
+        ([KeyCode::Esc], SrvCtlKey::Esc, "Back"),
+        ([KeyCode::Up], SrvCtlKey::MoveUp, "Move up"),
+        ([KeyCode::Down], SrvCtlKey::MoveDown, "Move down"),
+        ([KeyCode::Char('k')], SrvCtlKey::MoveUp, "Move up"),
+        ([KeyCode::Char('j')], SrvCtlKey::MoveDown, "Move down"),
     ]
 );
 
