@@ -442,8 +442,9 @@ impl TabContent for Connections {
     }
 
     fn render(&self, f: &mut Frame, area: Rect, _state: &mut Self::State) {
+        let section = Theme::get().section("connections");
         let block = Block::bordered()
-            .border_style(Theme::get().tab.tab_focused)
+            .border_style(section.border)
             .title(Self::TITLE);
 
         let mut title = if let Some(filter) = self.filter.as_ref() {
