@@ -27,7 +27,7 @@ mod_agent!(
     ]
 );
 
-#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[derive(Clone, Copy, Debug)]
 pub enum Key {
     Switch,
     MoveUp,
@@ -35,6 +35,23 @@ pub enum Key {
     Select,
 
     Action(Action),
+}
+
+impl serde::Serialize for Key {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Key::Switch => serializer.serialize_str("Switch"),
+            Key::MoveUp => serializer.serialize_str("MoveUp"),
+            Key::MoveDown => serializer.serialize_str("MoveDown"),
+            Key::Select => serializer.serialize_str("Select"),
+            Key::Action(action) => {
+                use serde::ser::SerializeMap;
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("Action", action)?;
+                map.end()
+            }
+        }
+    }
 }
 
 impl<'de> serde::Deserialize<'de> for Key {
