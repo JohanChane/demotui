@@ -157,13 +157,19 @@ impl Theme {
 }
 
 fn make_default_palette() -> SectionPaletteDef {
+    let mut extra = HashMap::new();
+    extra.insert("node_link".into(), StyleDef { fg: Some(Color::Rgb(100, 180, 150)), bg: None, bold: false });
+    extra.insert("node_file".into(), StyleDef { fg: Some(Color::Rgb(220, 220, 220)), bg: None, bold: false });
+    extra.insert("node_tcp".into(), StyleDef { fg: Some(Color::Cyan), bg: None, bold: false });
+    extra.insert("node_udp".into(), StyleDef { fg: Some(Color::Yellow), bg: None, bold: false });
+
     SectionPaletteDef {
         border: Some(StyleDef { fg: Some(Color::Rgb(0, 204, 153)), bg: None, bold: false }),
         highlight: Some(StyleDef { fg: Some(Color::Rgb(255, 255, 255)), bg: Some(Color::Rgb(64, 64, 64)), bold: true }),
-        text: None,
+        text: Some(StyleDef { fg: Some(Color::Rgb(220, 220, 220)), bg: None, bold: false }),
         secondary: Some(StyleDef { fg: Some(Color::Rgb(136, 136, 136)), bg: None, bold: false }),
         accent: None,
-        extra: HashMap::new(),
+        extra,
     }
 }
 
@@ -202,6 +208,11 @@ impl Theme {
     pub fn set(theme: Theme) {
         let mut lock = GLOBAL_THEME.write().unwrap();
         let _ = std::mem::replace(&mut *lock, theme);
+    }
+
+    pub fn enable_realtime() {
+        // No-op: theme is loaded eagerly via load() in the new design.
+        // Kept for backward compatibility with cli.rs call site.
     }
 }
 
