@@ -128,7 +128,7 @@ pub fn render(content: &Proxies, f: &mut Frame, area: Rect, state: &mut ListStat
                 }
             };
             let style = match node.node_type {
-                NodeType::Folder => section.secondary,
+                NodeType::Folder => section.border,
                 NodeType::Link => section.extra.get("node_link").copied().unwrap_or(section.text),
                 _ => section.extra.get("node_file").copied().unwrap_or(section.text),
             };

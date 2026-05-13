@@ -165,9 +165,9 @@ fn make_default_palette() -> SectionPaletteDef {
 
     SectionPaletteDef {
         border: Some(StyleDef { fg: Some(Color::Rgb(0, 204, 153)), bg: None, bold: false }),
-        highlight: Some(StyleDef { fg: Some(Color::Rgb(255, 255, 255)), bg: Some(Color::Rgb(64, 64, 64)), bold: true }),
-        text: Some(StyleDef { fg: Some(Color::Rgb(220, 220, 220)), bg: None, bold: false }),
-        secondary: Some(StyleDef { fg: Some(Color::Rgb(136, 136, 136)), bg: None, bold: false }),
+        highlight: Some(StyleDef { fg: None, bg: Some(Color::Rgb(64, 64, 64)), bold: true }),
+        text: None,
+        secondary: Some(StyleDef { fg: Some(Color::Red), bg: None, bold: false }),
         accent: None,
         extra,
     }
