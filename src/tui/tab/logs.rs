@@ -4,7 +4,9 @@ use crate::functions::restful::api_log::{self, LogEntry};
 use crate::functions::restful::config;
 use ratatui::text::Line;
 use ratatui::widgets::{List, ListItem};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 newtype_tab!(LogsTab(Tab<Logs>));
 
@@ -121,6 +123,8 @@ impl Default for Logs {
             paused: true,
             current_log_level: String::new(),
             ws_pending: None,
+            ws_level: Arc::new(Mutex::new(String::new())),
+            ws_reconnect: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -133,63 +137,97 @@ struct Logs {
     paused: bool,
     current_log_level: String,
     ws_pending: Option<Arc<Mutex<Vec<LogEntry>>>>,
+    ws_level: Arc<Mutex<String>>,
+    ws_reconnect: Arc<AtomicBool>,
 }
 
 fn spawn_ws_logs(
     controller: String,
     secret: Option<String>,
     pending: Arc<Mutex<Vec<LogEntry>>>,
+    level: Arc<Mutex<String>>,
+    reconnect: Arc<AtomicBool>,
 ) {
-    let ws_url = controller
-        .replace("http://", "ws://")
-        .replace("https://", "wss://");
-    let url_str = if let Some(ref s) = secret {
-        format!("{}/logs?token={}", ws_url, s)
-    } else {
-        format!("{}/logs", ws_url)
-    };
+    std::thread::spawn(move || {
+        let ws_scheme = if controller.starts_with("https") {
+            "wss"
+        } else {
+            "ws"
+        };
+        // Strip http(s):// prefix and trailing slash if any
+        let addr = controller
+            .strip_prefix("http://")
+            .or_else(|| controller.strip_prefix("https://"))
+            .unwrap_or(&controller)
+            .trim_end_matches('/');
 
-    std::thread::spawn(move || loop {
-        match tungstenite::connect(url_str.as_str()) {
-            Ok((mut ws, _)) => {
-                loop {
-                    match ws.read() {
-                        Ok(tungstenite::Message::Text(text)) => {
-                            if let Ok(v) =
-                                serde_json::from_str::<serde_json::Value>(&text)
-                            {
-                                let type_ = v
-                                    .get("type")
-                                    .and_then(|t| t.as_str())
-                                    .unwrap_or("unknown")
-                                    .to_owned();
-                                let payload = v
-                                    .get("payload")
-                                    .and_then(|p| p.as_str())
-                                    .unwrap_or("")
-                                    .to_owned();
-                                let entry = LogEntry {
-                                    type_,
-                                    payload,
-                                    time: api_log::timestamp(),
-                                };
-                                pending.lock().unwrap().push(entry);
+        loop {
+            let current_level = level.lock().unwrap().clone();
+            reconnect.store(false, Ordering::Relaxed);
+
+            let url_str = if let Some(ref s) = secret {
+                format!(
+                    "{ws_scheme}://{addr}/logs?token={s}&level={current_level}"
+                )
+            } else {
+                format!("{ws_scheme}://{addr}/logs?level={current_level}")
+            };
+
+            match tungstenite::connect(&url_str) {
+                Ok((mut ws, _)) => {
+                    // Set read timeout on inner TcpStream for periodic reconnect checks
+                    if let tungstenite::stream::MaybeTlsStream::Plain(stream) = ws.get_mut() {
+                        let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+                    }
+
+                    loop {
+                        match ws.read() {
+                            Ok(tungstenite::Message::Text(text)) => {
+                                if let Ok(v) =
+                                    serde_json::from_str::<serde_json::Value>(&text)
+                                {
+                                    let type_ = v
+                                        .get("type")
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("unknown")
+                                        .to_owned();
+                                    let payload = v
+                                        .get("payload")
+                                        .and_then(|p| p.as_str())
+                                        .unwrap_or("")
+                                        .to_owned();
+                                    pending.lock().unwrap().push(LogEntry {
+                                        type_,
+                                        payload,
+                                        time: api_log::timestamp(),
+                                    });
+                                }
                             }
+                            Ok(tungstenite::Message::Close(_)) => break,
+                            Err(tungstenite::Error::Io(ref e))
+                                if e.kind() == std::io::ErrorKind::WouldBlock
+                                    || e.kind()
+                                        == std::io::ErrorKind::TimedOut =>
+                            {
+                                if reconnect.load(Ordering::Relaxed) {
+                                    break;
+                                }
+                                continue;
+                            }
+                            Err(e) => {
+                                log::warn!("WebSocket read error: {e}");
+                                break;
+                            }
+                            _ => {}
                         }
-                        Ok(tungstenite::Message::Close(_)) => break,
-                        Err(e) => {
-                            log::warn!("WebSocket read error: {e}");
-                            break;
-                        }
-                        _ => {}
                     }
                 }
+                Err(e) => {
+                    log::warn!("WebSocket connect error: {e}");
+                }
             }
-            Err(e) => {
-                log::warn!("WebSocket connect error: {e}");
-            }
+            std::thread::sleep(Duration::from_secs(2));
         }
-        std::thread::sleep(std::time::Duration::from_secs(2));
     });
 }
 
@@ -227,7 +265,8 @@ impl BasicTabContent for Logs {
                     .as_ref()
                     .map(|l| l.to_string())
                     .unwrap_or_else(|| "unknown".to_owned());
-                content.current_log_level = level;
+                content.current_log_level = level.clone();
+                *content.ws_level.lock().unwrap() = level;
             })
         }
         .spawn_at(task_set);
@@ -270,7 +309,9 @@ impl TabContent for Logs {
         self.ws_pending = Some(Arc::clone(&pending));
         let controller = CONFIG.controller_for_core().to_owned();
         let secret = CONFIG.secret_for_core().map(|s| s.to_owned());
-        spawn_ws_logs(controller, secret, pending);
+        let level = Arc::clone(&self.ws_level);
+        let reconnect = Arc::clone(&self.ws_reconnect);
+        spawn_ws_logs(controller, secret, pending, level, reconnect);
 
         self.error = Some("Press p to start capturing logs".to_owned());
         // Fetch initial log level
@@ -285,11 +326,13 @@ impl TabContent for Logs {
                 if crate::config::is_core_mismatch() {
                     return;
                 }
-                content.current_log_level = cfg
+                let level = cfg
                     .log_level
                     .as_ref()
                     .map(|l| l.to_string())
                     .unwrap_or_else(|| "unknown".to_owned());
+                content.current_log_level = level.clone();
+                *content.ws_level.lock().unwrap() = level;
                 content.error = None;
             })
         }
@@ -411,8 +454,7 @@ impl TabContent for Logs {
         let visible_lines: Vec<ListItem> = self
             .buffer
             .iter_from_head()
-            .enumerate()
-            .map(|(_, e)| format!("{} {} {}", e.time, e.type_, e.payload))
+            .map(|e| format!("{} {} {}", e.time, e.type_, e.payload))
             .filter(|line| {
                 self.filter
                     .as_deref()
@@ -433,28 +475,14 @@ impl TabContent for Logs {
 }
 
 impl Logs {
-    fn toggle_log_level(&mut self, level: &str, task_set: &mut FutureSet<Self>) {
+    fn toggle_log_level(&mut self, level: &str, _task_set: &mut FutureSet<Self>) {
         if crate::config::is_core_mismatch() {
             return;
         }
         let level = level.to_owned();
-        async move {
-            let payload = serde_json::json!({"log-level": &level}).to_string();
-            let result = tokio::task::spawn_blocking(move || config::patch(payload))
-                .await
-                .unwrap();
-            wrapper(move |content: &mut Logs| {
-                match result {
-                    Ok(_) => {
-                        content.current_log_level = level;
-                    }
-                    Err(e) => {
-                        crate::tui::widget::popmsg::Confirm::err(e);
-                    }
-                }
-            })
-        }
-        .spawn_at(task_set);
+        self.current_log_level = level.clone();
+        *self.ws_level.lock().unwrap() = level;
+        self.ws_reconnect.store(true, Ordering::Relaxed);
     }
 }
 
