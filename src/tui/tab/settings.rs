@@ -48,19 +48,24 @@ impl TryFrom<&crate::tui::Key> for SettingsKey {
 }
 
 use crate::config::CoreType;
-use crate::functions::restful::config_struct::Mode;
+use crate::functions::restful::config_struct::{Mode, TunStack};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsOp {
     SwitchMode,
+    AllowLan,
+    TunEnable,
+    TunStackOp,
     FlushFakeIP,
     FlushDNSCache,
 }
 
 impl SettingsOp {
     fn all() -> Vec<Self> {
-        let mut ops = vec![Self::SwitchMode];
+        let mut ops = vec![Self::SwitchMode, Self::AllowLan];
         if CONFIG.core_type() == CoreType::Mihomo {
+            ops.push(Self::TunEnable);
+            ops.push(Self::TunStackOp);
             ops.push(Self::FlushFakeIP);
             ops.push(Self::FlushDNSCache);
         }
@@ -72,9 +77,15 @@ impl SettingsOp {
 struct SettingsContent {
     ops: Vec<SettingsOp>,
     current_mode: String,
+    allow_lan: bool,
+    tun_enable: bool,
+    tun_stack: String,
     mode_selector_state: ListState,
     mode_selector_visible: bool,
+    tun_selector_state: ListState,
+    tun_selector_visible: bool,
     modes: Vec<Mode>,
+    tun_stacks: Vec<TunStack>,
 }
 
 impl BasicTabContent for SettingsContent {
@@ -91,6 +102,9 @@ impl BasicTabContent for SettingsContent {
     fn on_enter(&mut self, _task_set: &mut FutureSet<Self>, _state: &mut Self::State) {
         if crate::config::is_core_mismatch() {
             self.current_mode = "core mismatch".to_owned();
+            self.allow_lan = false;
+            self.tun_enable = false;
+            self.tun_stack = "core mismatch".to_owned();
         }
     }
 }
@@ -99,12 +113,17 @@ impl TabContent for SettingsContent {
     fn init(&mut self, task_set: &mut FutureSet<Self>, state: &mut Self::State) {
         self.ops = SettingsOp::all();
         self.modes = Mode::VARIANTS.to_vec();
+        self.tun_stacks = TunStack::VARIANTS.to_vec();
         self.mode_selector_state.select(Some(0));
+        self.tun_selector_state.select(Some(0));
         if !self.ops.is_empty() {
             state.select(Some(0));
         }
         if crate::config::is_core_mismatch() {
             self.current_mode = "core mismatch".to_owned();
+            self.allow_lan = false;
+            self.tun_enable = false;
+            self.tun_stack = "core mismatch".to_owned();
             return;
         }
 
@@ -118,8 +137,18 @@ impl TabContent for SettingsContent {
             match result {
                 Ok(config) => {
                     let mode = config.mode.to_string();
+                    let allow_lan = config.allow_lan.unwrap_or(false);
+                    let tun_enable = config.tun.as_ref().map(|t| t.enable).unwrap_or(false);
+                    let tun_stack = config
+                        .tun
+                        .as_ref()
+                        .map(|t| t.stack.to_string())
+                        .unwrap_or_else(|| "Mixed".to_owned());
                     wrapper(move |c: &mut SettingsContent| {
                         c.current_mode = mode;
+                        c.allow_lan = allow_lan;
+                        c.tun_enable = tun_enable;
+                        c.tun_stack = tun_stack;
                     })
                 }
                 Err(e) => {
@@ -195,6 +224,60 @@ impl TabContent for SettingsContent {
             return;
         }
 
+        if self.tun_selector_visible {
+            match key {
+                SettingsKey::MoveUp => {
+                    let i = self.tun_selector_state.selected().unwrap_or(0);
+                    self.tun_selector_state
+                        .select(Some(i.saturating_sub(1)));
+                }
+                SettingsKey::MoveDown => {
+                    let i = self.tun_selector_state.selected().unwrap_or(0);
+                    if i + 1 < self.tun_stacks.len() {
+                        self.tun_selector_state.select(Some(i + 1));
+                    }
+                }
+                SettingsKey::Esc => {
+                    self.tun_selector_visible = false;
+                }
+                SettingsKey::Execute => {
+                    let idx =
+                        self.tun_selector_state.selected().unwrap_or(0);
+                    if let Some(stack) = self.tun_stacks.get(idx) {
+                        let stack = *stack;
+                        self.tun_selector_visible = false;
+                        async move {
+                            if crate::config::is_core_mismatch() {
+                                return do_nothing();
+                            }
+                            let payload =
+                                serde_json::json!({"tun": {"stack": stack.to_string()}})
+                                    .to_string();
+                            let result = tokio::task::spawn_blocking(move || {
+                                crate::functions::restful::config::patch(payload)
+                            })
+                            .await
+                            .unwrap();
+                            match result {
+                                Ok(_) => {
+                                    let new_val = stack.to_string();
+                                    wrapper(move |c: &mut SettingsContent| {
+                                        c.tun_stack = new_val;
+                                    })
+                                }
+                                Err(e) => {
+                                    crate::tui::widget::popmsg::Confirm::err(e);
+                                    do_nothing()
+                                }
+                            }
+                        }
+                        .spawn_at(task_set);
+                    }
+                }
+            }
+            return;
+        }
+
         match key {
             SettingsKey::MoveUp => {
                 let i = state.selected().unwrap_or(0);
@@ -212,6 +295,69 @@ impl TabContent for SettingsContent {
                 match op {
                     SettingsOp::SwitchMode => {
                         self.mode_selector_visible = true;
+                    }
+                    SettingsOp::AllowLan => {
+                        let new_val = !self.allow_lan;
+                        self.allow_lan = new_val;
+                        async move {
+                            if crate::config::is_core_mismatch() {
+                                return do_nothing();
+                            }
+                            let payload =
+                                serde_json::json!({"allow-lan": new_val}).to_string();
+                            let result = tokio::task::spawn_blocking(move || {
+                                crate::functions::restful::config::patch(payload)
+                            })
+                            .await
+                            .unwrap();
+                            match result {
+                                Ok(_) => {
+                                    wrapper(move |c: &mut SettingsContent| {
+                                        c.allow_lan = new_val;
+                                    })
+                                }
+                                Err(e) => {
+                                    crate::tui::widget::popmsg::Confirm::err(e);
+                                    wrapper(move |c: &mut SettingsContent| {
+                                        c.allow_lan = !new_val;
+                                    })
+                                }
+                            }
+                        }
+                        .spawn_at(task_set);
+                    }
+                    SettingsOp::TunEnable => {
+                        let new_val = !self.tun_enable;
+                        self.tun_enable = new_val;
+                        async move {
+                            if crate::config::is_core_mismatch() {
+                                return do_nothing();
+                            }
+                            let payload =
+                                serde_json::json!({"tun": {"enable": new_val}}).to_string();
+                            let result = tokio::task::spawn_blocking(move || {
+                                crate::functions::restful::config::patch(payload)
+                            })
+                            .await
+                            .unwrap();
+                            match result {
+                                Ok(_) => {
+                                    wrapper(move |c: &mut SettingsContent| {
+                                        c.tun_enable = new_val;
+                                    })
+                                }
+                                Err(e) => {
+                                    crate::tui::widget::popmsg::Confirm::err(e);
+                                    wrapper(move |c: &mut SettingsContent| {
+                                        c.tun_enable = !new_val;
+                                    })
+                                }
+                            }
+                        }
+                        .spawn_at(task_set);
+                    }
+                    SettingsOp::TunStackOp => {
+                        self.tun_selector_visible = true;
                     }
                     SettingsOp::FlushFakeIP => {
                         async move {
@@ -282,6 +428,17 @@ impl TabContent for SettingsContent {
                     SettingsOp::SwitchMode => {
                         ("Mode", self.current_mode.as_str())
                     }
+                    SettingsOp::AllowLan => {
+                        let val = if self.allow_lan { "Yes" } else { "No" };
+                        ("Allow LAN", val)
+                    }
+                    SettingsOp::TunEnable => {
+                        let val = if self.tun_enable { "Yes" } else { "No" };
+                        ("TUN", val)
+                    }
+                    SettingsOp::TunStackOp => {
+                        ("TUN Stack", self.tun_stack.as_str())
+                    }
                     SettingsOp::FlushFakeIP => {
                         ("Flush Fake-IP", "")
                     }
@@ -322,6 +479,28 @@ impl TabContent for SettingsContent {
                 mode_list,
                 select_area,
                 &mut self.mode_selector_state.clone(),
+            );
+        }
+
+        if self.tun_selector_visible {
+            let select_area = centered_rect(60, 30, area);
+            let tun_items: Vec<ListItem> = self
+                .tun_stacks
+                .iter()
+                .map(|s| ListItem::new(format!("  {}", s)))
+                .collect();
+            let tun_list = List::new(tun_items)
+                .block(
+                    Block::bordered()
+                        .border_style(Theme::get().section("settings").border)
+                        .title("TUN Stack"),
+                )
+                .highlight_style(highlight_style);
+            f.render_widget(Clear, select_area);
+            f.render_stateful_widget(
+                tun_list,
+                select_area,
+                &mut self.tun_selector_state.clone(),
             );
         }
     }
