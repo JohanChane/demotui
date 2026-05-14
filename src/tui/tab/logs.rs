@@ -1,5 +1,5 @@
 use super::dev::*;
-use crate::config::{CONFIG, CoreType};
+use crate::config::CONFIG;
 use crate::functions::restful::api_log::{self, LogEntry};
 use crate::functions::restful::config;
 use ratatui::text::Line;
@@ -203,12 +203,34 @@ impl BasicTabContent for Logs {
         agent::all_shortcuts()
     }
 
-    fn on_enter(&mut self, _task_set: &mut FutureSet<Self>, _state: &mut Self::State) {
+    fn on_enter(&mut self, task_set: &mut FutureSet<Self>, _state: &mut Self::State) {
         if crate::config::is_core_mismatch() {
             self.buffer.clear();
             self.error = Some("API data mismatch with configured core".to_owned());
             self.paused = true;
+            return;
         }
+        // Refresh log level from core on every re-entry
+        async {
+            let cfg = tri!(
+                tokio::task::spawn_blocking(config::fetch)
+                    .await
+                    .unwrap(),
+                or_set
+            );
+            wrapper(move |content: &mut Self| {
+                if crate::config::is_core_mismatch() {
+                    return;
+                }
+                let level = cfg
+                    .log_level
+                    .as_ref()
+                    .map(|l| l.to_string())
+                    .unwrap_or_else(|| "unknown".to_owned());
+                content.current_log_level = level;
+            })
+        }
+        .spawn_at(task_set);
     }
 
     fn after_sync(&self, task_set: &mut FutureSet<Self>) {
@@ -218,158 +240,60 @@ impl BasicTabContent for Logs {
         if crate::config::is_core_mismatch() {
             return;
         }
-        match CONFIG.core_type() {
-            CoreType::Singbox => {
-                if let Some(ref pending) = self.ws_pending {
-                    let pending = Arc::clone(pending);
-                    async move {
-                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                        let entries: Vec<LogEntry> =
-                            pending.lock().unwrap().drain(..).collect();
-                        wrapper(move |content: &mut Self| {
-                            for entry in entries {
-                                content.buffer.push(entry);
-                            }
-                            if content.buffer.count() > 0
-                                && content.scroll + 1
-                                    >= content.buffer.count().saturating_sub(1)
-                            {
-                                content.scroll =
-                                    content.buffer.count().saturating_sub(1);
-                            }
-                        })
+        if let Some(ref pending) = self.ws_pending {
+            let pending = Arc::clone(pending);
+            async move {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                let entries: Vec<LogEntry> =
+                    pending.lock().unwrap().drain(..).collect();
+                wrapper(move |content: &mut Self| {
+                    for entry in entries {
+                        content.buffer.push(entry);
                     }
-                    .spawn_at(task_set);
-                }
+                    if content.buffer.count() > 0
+                        && content.scroll + 1
+                            >= content.buffer.count().saturating_sub(1)
+                    {
+                        content.scroll =
+                            content.buffer.count().saturating_sub(1);
+                    }
+                })
             }
-            CoreType::Mihomo => {
-                let level = self.current_log_level.clone();
-                if level == "silent" {
-                    return;
-                }
-                async move {
-                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    let result = tokio::task::spawn_blocking(move || {
-                        api_log::get_logs(Some(&level))
-                    })
-                    .await
-                    .unwrap();
-                    wrapper(move |content: &mut Self| {
-                        match result {
-                            Ok(entries) => {
-                                content.error = None;
-                                for entry in entries {
-                                    content.buffer.push(entry);
-                                }
-                                if content.buffer.count() > 0
-                                    && content.scroll + 1
-                                        >= content.buffer.count().saturating_sub(1)
-                                {
-                                    content.scroll =
-                                        content.buffer.count().saturating_sub(1);
-                                }
-                            }
-                            Err(e) => {
-                                content.error =
-                                    Some(format!("Failed to get logs: {e}"));
-                            }
-                        }
-                    })
-                }
-                .spawn_at(task_set);
-            }
+            .spawn_at(task_set);
         }
     }
 }
 
 impl TabContent for Logs {
     fn init(&mut self, task_set: &mut FutureSet<Self>, _state: &mut Self::State) {
-        match CONFIG.core_type() {
-            CoreType::Singbox => {
-                let pending = Arc::new(Mutex::new(Vec::new()));
-                self.ws_pending = Some(Arc::clone(&pending));
-                let controller = CONFIG.controller_for_core().to_owned();
-                let secret = CONFIG.secret_for_core().map(|s| s.to_owned());
-                spawn_ws_logs(controller, secret, pending);
+        let pending = Arc::new(Mutex::new(Vec::new()));
+        self.ws_pending = Some(Arc::clone(&pending));
+        let controller = CONFIG.controller_for_core().to_owned();
+        let secret = CONFIG.secret_for_core().map(|s| s.to_owned());
+        spawn_ws_logs(controller, secret, pending);
 
-                self.error = Some("Press p to start capturing logs".to_owned());
-                // Fetch initial log level
-                async {
-                    let cfg = tri!(
-                        tokio::task::spawn_blocking(config::fetch)
-                            .await
-                            .unwrap(),
-                        or_set
-                    );
-                    wrapper(move |content: &mut Self| {
-                        if crate::config::is_core_mismatch() {
-                            return;
-                        }
-                        content.current_log_level = cfg
-                            .log_level
-                            .as_ref()
-                            .map(|l| l.to_string())
-                            .unwrap_or_else(|| "unknown".to_owned());
-                        content.error = None;
-                    })
-                }
-                .spawn_at(task_set);
-            }
-            CoreType::Mihomo => {
-                self.error = Some("Press p to start capturing logs".to_owned());
-                // Fetch initial log level
-                async {
-                    let cfg = tri!(
-                        tokio::task::spawn_blocking(config::fetch)
-                            .await
-                            .unwrap(),
-                        or_set
-                    );
-                    wrapper(move |content: &mut Self| {
-                        if crate::config::is_core_mismatch() {
-                            return;
-                        }
-                        content.current_log_level = cfg
-                            .log_level
-                            .as_ref()
-                            .map(|l| l.to_string())
-                            .unwrap_or_else(|| "unknown".to_owned());
-                        content.error = None;
-                    })
-                }
-                .spawn_at(task_set);
-                // Fetch initial logs
-                async {
-                    let result = tokio::task::spawn_blocking(|| {
-                        api_log::get_logs(None)
-                    })
+        self.error = Some("Press p to start capturing logs".to_owned());
+        // Fetch initial log level
+        async {
+            let cfg = tri!(
+                tokio::task::spawn_blocking(config::fetch)
                     .await
-                    .unwrap();
-                    wrapper(move |content: &mut Self| {
-                        if crate::config::is_core_mismatch() {
-                            return;
-                        }
-                        match result {
-                            Ok(entries) => {
-                                for entry in entries {
-                                    content.buffer.push(entry);
-                                }
-                                if content.buffer.count() > 0 {
-                                    content.scroll =
-                                        content.buffer.count().saturating_sub(1);
-                                }
-                                content.error = None;
-                            }
-                            Err(e) => {
-                                content.error =
-                                    Some(format!("Failed to get logs: {e}"));
-                            }
-                        }
-                    })
+                    .unwrap(),
+                or_set
+            );
+            wrapper(move |content: &mut Self| {
+                if crate::config::is_core_mismatch() {
+                    return;
                 }
-                .spawn_at(task_set);
-            }
+                content.current_log_level = cfg
+                    .log_level
+                    .as_ref()
+                    .map(|l| l.to_string())
+                    .unwrap_or_else(|| "unknown".to_owned());
+                content.error = None;
+            })
         }
+        .spawn_at(task_set);
     }
 
     fn handle_key_event(
@@ -474,15 +398,6 @@ impl TabContent for Logs {
                 .right_aligned()
                 .reversed(),
         );
-
-        if self.current_log_level == "silent" && self.buffer.is_empty() {
-            let widget = ratatui::widgets::Paragraph::new(
-                "Log level is set to silent — no logs will be captured.\nSwitch to debug/info/warning/error to view logs.",
-            )
-            .block(block);
-            f.render_widget(widget, area);
-            return;
-        }
 
         if !self.error.as_deref().unwrap_or("").is_empty() && self.buffer.is_empty() {
             let widget = ratatui::widgets::Paragraph::new(
