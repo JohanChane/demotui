@@ -109,7 +109,13 @@ impl TabContent for SettingsContent {
         }
 
         async move {
-            match crate::functions::restful::config::fetch() {
+            let result =
+                tokio::task::spawn_blocking(|| {
+                    crate::functions::restful::config::fetch()
+                })
+                .await
+                .unwrap();
+            match result {
                 Ok(config) => {
                     let mode = config.mode.to_string();
                     let log_level = config
@@ -165,9 +171,14 @@ impl TabContent for SettingsContent {
                             let payload =
                                 serde_json::json!({"mode": mode.to_string()})
                                     .to_string();
-                            match crate::functions::restful::config::patch(
-                                payload,
-                            ) {
+                            let result = tokio::task::spawn_blocking(move || {
+                                crate::functions::restful::config::patch(
+                                    payload,
+                                )
+                            })
+                            .await
+                            .unwrap();
+                            match result {
                                 Ok(_) => {
                                     let new_val = mode.to_string();
                                     wrapper(move |c: &mut SettingsContent| {
@@ -228,9 +239,14 @@ impl TabContent for SettingsContent {
                                 {"log-level": level.to_string()}
                             )
                             .to_string();
-                            match crate::functions::restful::config::patch(
-                                payload,
-                            ) {
+                            let result = tokio::task::spawn_blocking(move || {
+                                crate::functions::restful::config::patch(
+                                    payload,
+                                )
+                            })
+                            .await
+                            .unwrap();
+                            match result {
                                 Ok(_) => {
                                     let new_val = level.to_string();
                                     wrapper(move |c: &mut SettingsContent| {

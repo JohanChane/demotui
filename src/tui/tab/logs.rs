@@ -244,9 +244,16 @@ impl BasicTabContent for Logs {
             }
             CoreType::Mihomo => {
                 let level = self.current_log_level.clone();
+                if level == "silent" {
+                    return;
+                }
                 async move {
                     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                    let result = api_log::get_logs(Some(&level));
+                    let result = tokio::task::spawn_blocking(move || {
+                        api_log::get_logs(Some(&level))
+                    })
+                    .await
+                    .unwrap();
                     wrapper(move |content: &mut Self| {
                         match result {
                             Ok(entries) => {
@@ -288,7 +295,12 @@ impl TabContent for Logs {
                 self.error = Some("Press p to start capturing logs".to_owned());
                 // Fetch initial log level
                 async {
-                    let cfg = tri!(config::fetch(), or_set);
+                    let cfg = tri!(
+                        tokio::task::spawn_blocking(config::fetch)
+                            .await
+                            .unwrap(),
+                        or_set
+                    );
                     wrapper(move |content: &mut Self| {
                         if crate::config::is_core_mismatch() {
                             return;
@@ -307,7 +319,12 @@ impl TabContent for Logs {
                 self.error = Some("Press p to start capturing logs".to_owned());
                 // Fetch initial log level
                 async {
-                    let cfg = tri!(config::fetch(), or_set);
+                    let cfg = tri!(
+                        tokio::task::spawn_blocking(config::fetch)
+                            .await
+                            .unwrap(),
+                        or_set
+                    );
                     wrapper(move |content: &mut Self| {
                         if crate::config::is_core_mismatch() {
                             return;
@@ -323,7 +340,11 @@ impl TabContent for Logs {
                 .spawn_at(task_set);
                 // Fetch initial logs
                 async {
-                    let result = api_log::get_logs(None);
+                    let result = tokio::task::spawn_blocking(|| {
+                        api_log::get_logs(None)
+                    })
+                    .await
+                    .unwrap();
                     wrapper(move |content: &mut Self| {
                         if crate::config::is_core_mismatch() {
                             return;
@@ -454,6 +475,15 @@ impl TabContent for Logs {
                 .reversed(),
         );
 
+        if self.current_log_level == "silent" && self.buffer.is_empty() {
+            let widget = ratatui::widgets::Paragraph::new(
+                "Log level is set to silent — no logs will be captured.\nSwitch to debug/info/warning/error to view logs.",
+            )
+            .block(block);
+            f.render_widget(widget, area);
+            return;
+        }
+
         if !self.error.as_deref().unwrap_or("").is_empty() && self.buffer.is_empty() {
             let widget = ratatui::widgets::Paragraph::new(
                 self.error.as_deref().unwrap_or(""),
@@ -495,7 +525,9 @@ impl Logs {
         let level = level.to_owned();
         async move {
             let payload = serde_json::json!({"log-level": &level}).to_string();
-            let result = config::patch(payload);
+            let result = tokio::task::spawn_blocking(move || config::patch(payload))
+                .await
+                .unwrap();
             wrapper(move |content: &mut Logs| {
                 match result {
                     Ok(_) => {
