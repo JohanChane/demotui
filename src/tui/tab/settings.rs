@@ -1,4 +1,5 @@
 use super::dev::*;
+use crate::config::CONFIG;
 use ratatui::{
     layout::{Constraint, Layout},
     text::{Line, Span},
@@ -46,16 +47,24 @@ impl TryFrom<&crate::tui::Key> for SettingsKey {
     }
 }
 
+use crate::config::CoreType;
 use crate::functions::restful::config_struct::Mode;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsOp {
     SwitchMode,
+    FlushFakeIP,
+    FlushDNSCache,
 }
 
 impl SettingsOp {
     fn all() -> Vec<Self> {
-        vec![Self::SwitchMode]
+        let mut ops = vec![Self::SwitchMode];
+        if CONFIG.core_type() == CoreType::Mihomo {
+            ops.push(Self::FlushFakeIP);
+            ops.push(Self::FlushDNSCache);
+        }
+        ops
     }
 }
 
@@ -204,6 +213,48 @@ impl TabContent for SettingsContent {
                     SettingsOp::SwitchMode => {
                         self.mode_selector_visible = true;
                     }
+                    SettingsOp::FlushFakeIP => {
+                        async move {
+                            if crate::config::is_core_mismatch() {
+                                return do_nothing();
+                            }
+                            let result =
+                                tokio::task::spawn_blocking(|| {
+                                    crate::functions::restful::cache::flush_fakeip()
+                                })
+                                .await
+                                .unwrap();
+                            match result {
+                                Ok(_) => do_nothing(),
+                                Err(e) => {
+                                    crate::tui::widget::popmsg::Confirm::err(e);
+                                    do_nothing()
+                                }
+                            }
+                        }
+                        .spawn_at(task_set);
+                    }
+                    SettingsOp::FlushDNSCache => {
+                        async move {
+                            if crate::config::is_core_mismatch() {
+                                return do_nothing();
+                            }
+                            let result =
+                                tokio::task::spawn_blocking(|| {
+                                    crate::functions::restful::cache::flush_dns()
+                                })
+                                .await
+                                .unwrap();
+                            match result {
+                                Ok(_) => do_nothing(),
+                                Err(e) => {
+                                    crate::tui::widget::popmsg::Confirm::err(e);
+                                    do_nothing()
+                                }
+                            }
+                        }
+                        .spawn_at(task_set);
+                    }
                 }
             }
             _ => {}
@@ -230,6 +281,12 @@ impl TabContent for SettingsContent {
                 let (name, current) = match op {
                     SettingsOp::SwitchMode => {
                         ("Mode", self.current_mode.as_str())
+                    }
+                    SettingsOp::FlushFakeIP => {
+                        ("Flush Fake-IP", "")
+                    }
+                    SettingsOp::FlushDNSCache => {
+                        ("Flush DNS Cache", "")
                     }
                 };
                 ListItem::new(Line::from(vec![
