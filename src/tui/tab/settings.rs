@@ -46,17 +46,16 @@ impl TryFrom<&crate::tui::Key> for SettingsKey {
     }
 }
 
-use crate::functions::restful::config_struct::{LogLevel, Mode};
+use crate::functions::restful::config_struct::Mode;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum SettingsOp {
     SwitchMode,
-    SwitchLogLevel,
 }
 
 impl SettingsOp {
     fn all() -> Vec<Self> {
-        vec![Self::SwitchMode, Self::SwitchLogLevel]
+        vec![Self::SwitchMode]
     }
 }
 
@@ -64,13 +63,9 @@ impl SettingsOp {
 struct SettingsContent {
     ops: Vec<SettingsOp>,
     current_mode: String,
-    current_log_level: String,
     mode_selector_state: ListState,
     mode_selector_visible: bool,
     modes: Vec<Mode>,
-    log_level_selector_state: ListState,
-    log_level_selector_visible: bool,
-    log_levels: Vec<LogLevel>,
 }
 
 impl BasicTabContent for SettingsContent {
@@ -87,7 +82,6 @@ impl BasicTabContent for SettingsContent {
     fn on_enter(&mut self, _task_set: &mut FutureSet<Self>, _state: &mut Self::State) {
         if crate::config::is_core_mismatch() {
             self.current_mode = "core mismatch".to_owned();
-            self.current_log_level = "core mismatch".to_owned();
         }
     }
 }
@@ -97,14 +91,11 @@ impl TabContent for SettingsContent {
         self.ops = SettingsOp::all();
         self.modes = Mode::VARIANTS.to_vec();
         self.mode_selector_state.select(Some(0));
-        self.log_levels = LogLevel::VARIANTS.to_vec();
-        self.log_level_selector_state.select(Some(0));
         if !self.ops.is_empty() {
             state.select(Some(0));
         }
         if crate::config::is_core_mismatch() {
             self.current_mode = "core mismatch".to_owned();
-            self.current_log_level = "core mismatch".to_owned();
             return;
         }
 
@@ -118,13 +109,8 @@ impl TabContent for SettingsContent {
             match result {
                 Ok(config) => {
                     let mode = config.mode.to_string();
-                    let log_level = config
-                        .log_level
-                        .map(|l| l.to_string())
-                        .unwrap_or_else(|| "info".to_owned());
                     wrapper(move |c: &mut SettingsContent| {
                         c.current_mode = mode;
-                        c.current_log_level = log_level;
                     })
                 }
                 Err(e) => {
@@ -200,74 +186,6 @@ impl TabContent for SettingsContent {
             return;
         }
 
-        if self.log_level_selector_visible {
-            match key {
-                SettingsKey::MoveUp => {
-                    let i = self
-                        .log_level_selector_state
-                        .selected()
-                        .unwrap_or(0);
-                    self.log_level_selector_state
-                        .select(Some(i.saturating_sub(1)));
-                }
-                SettingsKey::MoveDown => {
-                    let i = self
-                        .log_level_selector_state
-                        .selected()
-                        .unwrap_or(0);
-                    if i + 1 < self.log_levels.len() {
-                        self.log_level_selector_state
-                            .select(Some(i + 1));
-                    }
-                }
-                SettingsKey::Esc => {
-                    self.log_level_selector_visible = false;
-                }
-                SettingsKey::Execute => {
-                    let idx = self
-                        .log_level_selector_state
-                        .selected()
-                        .unwrap_or(0);
-                    if let Some(level) = self.log_levels.get(idx) {
-                        let level = *level;
-                        self.log_level_selector_visible = false;
-                        async move {
-                            if crate::config::is_core_mismatch() {
-                                return do_nothing();
-                            }
-                            let payload = serde_json::json!(
-                                {"log-level": level.to_string()}
-                            )
-                            .to_string();
-                            let result = tokio::task::spawn_blocking(move || {
-                                crate::functions::restful::config::patch(
-                                    payload,
-                                )
-                            })
-                            .await
-                            .unwrap();
-                            match result {
-                                Ok(_) => {
-                                    let new_val = level.to_string();
-                                    wrapper(move |c: &mut SettingsContent| {
-                                        c.current_log_level = new_val;
-                                    })
-                                }
-                                Err(e) => {
-                                    crate::tui::widget::popmsg::Confirm::err(
-                                        e,
-                                    );
-                                    do_nothing()
-                                }
-                            }
-                        }
-                        .spawn_at(task_set);
-                    }
-                }
-            }
-            return;
-        }
-
         match key {
             SettingsKey::MoveUp => {
                 let i = state.selected().unwrap_or(0);
@@ -285,9 +203,6 @@ impl TabContent for SettingsContent {
                 match op {
                     SettingsOp::SwitchMode => {
                         self.mode_selector_visible = true;
-                    }
-                    SettingsOp::SwitchLogLevel => {
-                        self.log_level_selector_visible = true;
                     }
                 }
             }
@@ -315,9 +230,6 @@ impl TabContent for SettingsContent {
                 let (name, current) = match op {
                     SettingsOp::SwitchMode => {
                         ("Mode", self.current_mode.as_str())
-                    }
-                    SettingsOp::SwitchLogLevel => {
-                        ("Log Level", self.current_log_level.as_str())
                     }
                 };
                 ListItem::new(Line::from(vec![
@@ -353,28 +265,6 @@ impl TabContent for SettingsContent {
                 mode_list,
                 select_area,
                 &mut self.mode_selector_state.clone(),
-            );
-        }
-
-        if self.log_level_selector_visible {
-            let select_area = centered_rect(60, 30, area);
-            let level_items: Vec<ListItem> = self
-                .log_levels
-                .iter()
-                .map(|l| ListItem::new(format!("  {}", l)))
-                .collect();
-            let level_list = List::new(level_items)
-                .block(
-                    Block::bordered()
-                        .border_style(Theme::get().section("settings").border)
-                        .title("Log Level"),
-                )
-                .highlight_style(highlight_style);
-            f.render_widget(Clear, select_area);
-            f.render_stateful_widget(
-                level_list,
-                select_area,
-                &mut self.log_level_selector_state.clone(),
             );
         }
     }
